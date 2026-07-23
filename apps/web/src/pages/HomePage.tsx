@@ -18,7 +18,14 @@ export default function HomePage() {
     <>
       {/* Hero */}
       <section className="relative bg-surface-inverse">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary-dark via-surface-inverse to-primary opacity-95" />
+        {/* Background photo — swap apps/web/public/hero.jpg to change it. */}
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: 'url(/hero.jpg)' }}
+          aria-hidden="true"
+        />
+        {/* Dark gradient overlay keeps the headline legible over the photo. */}
+        <div className="absolute inset-0 bg-gradient-to-r from-surface-inverse via-surface-inverse/90 to-surface-inverse/40" />
         <Container className="relative py-24 lg:py-32">
           <p className="text-label-lg font-semibold uppercase tracking-widest text-accent">
             Tools, Hardware &amp; Supplies

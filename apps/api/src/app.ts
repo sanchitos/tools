@@ -1,3 +1,4 @@
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import express, { type Express, type RequestHandler } from 'express';
 import helmet from 'helmet';
 import compression from 'compression';
@@ -41,7 +42,22 @@ export function createApp(): Express {
   // Correct client IPs + secure cookies behind Railway's proxy.
   app.set('trust proxy', 1);
 
-  app.use(pinoHttp({ logger }));
+  app.use(
+    pinoHttp({
+      logger,
+      // Log only problems: silent on success, warn on 4xx, error on 5xx/throws.
+      customLogLevel: (_req, res, err) => {
+        if (err || res.statusCode >= 500) return 'error';
+        if (res.statusCode >= 400) return 'warn';
+        return 'silent';
+      },
+      // Keep the rare logged line concise — no full header/cookie dump.
+      serializers: {
+        req: (req: IncomingMessage) => ({ method: req.method, url: (req as { url?: string }).url }),
+        res: (res: ServerResponse) => ({ statusCode: res.statusCode }),
+      },
+    }),
+  );
   app.use(helmet());
   app.use(compression());
   app.use(devCors());

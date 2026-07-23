@@ -1,5 +1,6 @@
 import { Link, NavLink } from 'react-router-dom';
 import { Container } from './ui/Container.js';
+import { PHONE_DISPLAY, PHONE_TEL } from '../lib/contact.js';
 
 const navLink = ({ isActive }: { isActive: boolean }) =>
   `pb-1 text-label-lg font-semibold uppercase tracking-wide transition-colors ${
@@ -16,8 +17,8 @@ export function Header() {
       <div className="bg-primary text-primary-fg">
         <Container className="flex h-9 items-center justify-between text-label-sm">
           <span className="uppercase tracking-wide">Tools, Hardware &amp; Supplies — Jamaica</span>
-          <a href="tel:+18760000000" className="hidden hover:text-accent sm:inline">
-            Call us: (876) 000-0000
+          <a href={`tel:${PHONE_TEL}`} className="hidden hover:text-accent sm:inline">
+            Call us: {PHONE_DISPLAY}
           </a>
         </Container>
       </div>
