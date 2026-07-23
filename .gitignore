@@ -1,0 +1,28 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+apps/*/dist/
+packages/*/dist/
+
+# env
+.env
+.env.local
+apps/*/.env
+apps/*/.env.local
+
+# logs
+*.log
+npm-debug.log*
+
+# editor / os
+.DS_Store
+.vscode/
+.idea/
+
+# test / coverage
+coverage/
+
+# vite
+apps/web/.vite/
