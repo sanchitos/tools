@@ -58,7 +58,19 @@ export function createApp(): Express {
       },
     }),
   );
-  app.use(helmet());
+  // Product/brand images come from Supabase Storage and external seed URLs, so
+  // relax only img-src to allow any HTTPS image (plus data: for placeholders).
+  // Every other CSP directive keeps helmet's secure defaults.
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        useDefaults: true,
+        directives: {
+          'img-src': ["'self'", 'data:', 'https:'],
+        },
+      },
+    }),
+  );
   app.use(compression());
   app.use(devCors());
   app.use(express.json({ limit: '1mb' }));
