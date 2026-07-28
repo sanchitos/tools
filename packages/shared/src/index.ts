@@ -80,6 +80,7 @@ export interface ProductSummaryDTO {
   id: string;
   slug: string;
   name: string;
+  sku: string | null;
   shortDescription: string | null;
   price: number;
   currency: Currency;
@@ -95,7 +96,6 @@ export interface ProductSummaryDTO {
 /** Full product shape for the detail page. */
 export interface ProductDetailDTO extends ProductSummaryDTO {
   description: string | null;
-  sku: string | null;
   images: ProductImageDTO[];
   specs: ProductSpecDTO[];
   highlights: ProductHighlightDTO[];
@@ -106,7 +106,7 @@ export interface ProductDetailDTO extends ProductSummaryDTO {
 // Catalog — query params (Shop page, URL-synced)
 // ---------------------------------------------------------------------------
 
-export type ProductSort = 'featured' | 'price-asc' | 'price-desc' | 'name';
+export type ProductSort = 'featured' | 'price-asc' | 'price-desc' | 'name' | 'relevance';
 
 export interface ProductListQuery {
   category?: string[];
@@ -163,7 +163,6 @@ export interface AdminBrandDTO extends BrandDTO {
 /** Lightweight row for the admin products list (no specs/highlights/related). */
 export interface AdminProductListItem extends ProductSummaryDTO {
   isPublished: boolean;
-  sku: string | null;
   brandId: string | null;
   categoryId: string | null;
   createdAt: string;
@@ -174,4 +173,38 @@ export interface AdminProductListItem extends ProductSummaryDTO {
 export interface OrphanCleanupResult {
   deleted: number;
   paths: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Agent DTOs (machine-to-machine catalog search, e.g. the WhatsApp agent)
+// ---------------------------------------------------------------------------
+
+/**
+ * Deliberately lean, unlike ProductSummaryDTO: no id, images, rating,
+ * reviewCount, or nested brand/category objects — those cost real tokens on
+ * every agent turn for data an LLM answer never uses. `url` lets the agent
+ * link the product on the storefront.
+ */
+export interface AgentProductDTO {
+  name: string;
+  sku: string | null;
+  price: number;
+  currency: Currency;
+  inStock: boolean;
+  stockCount: number;
+  brand: string | null;
+  category: string | null;
+  shortDescription: string | null;
+  url: string;
+}
+
+export interface AgentSearchResult {
+  items: AgentProductDTO[];
+  total: number;
+  /**
+   * Populated only when `total` is 0, so a caller has something true to
+   * offer ("we don't carry that, but we do have X") instead of the model
+   * inventing a product to fill the silence.
+   */
+  categories?: Array<Pick<CategoryDTO, 'slug' | 'label'>>;
 }

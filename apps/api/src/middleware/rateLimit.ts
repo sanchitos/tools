@@ -15,3 +15,35 @@ export const authRateLimit = rateLimit({
     error: { code: 'RATE_LIMITED', message: 'Too many attempts, try again later' },
   },
 });
+
+/**
+ * Rate limiter for the public catalog (GET /products etc). It had none
+ * before `q` started hitting the search_products RPC (0005_search.sql),
+ * which made an unlimited endpoint a cheap amplification target. Looser
+ * than the auth limiter since this is normal browsing traffic, not a
+ * credentialed action.
+ */
+export const catalogRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  limit: isTest ? 1000 : 120,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: {
+    error: { code: 'RATE_LIMITED', message: 'Too many requests, try again shortly' },
+  },
+});
+
+/**
+ * Rate limiter for the machine-to-machine agent surface (/api/v1/agent). All
+ * n8n traffic arrives from one IP, so a per-IP limit is effectively global
+ * for this route — sized for a chat agent's call volume, not browsing.
+ */
+export const agentRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  limit: isTest ? 1000 : 120,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: {
+    error: { code: 'RATE_LIMITED', message: 'Too many requests, try again shortly' },
+  },
+});

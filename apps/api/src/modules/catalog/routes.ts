@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { ah } from '../../lib/errors.js';
+import { catalogRateLimit } from '../../middleware/rateLimit.js';
 import { productListQuerySchema, slugParamSchema } from './schema.js';
 import {
   getFeatured,
@@ -17,6 +18,7 @@ import {
  */
 export function catalogRouter(): Router {
   const router = Router();
+  router.use(catalogRateLimit);
 
   router.get(
     '/products/featured',

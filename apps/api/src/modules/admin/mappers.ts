@@ -49,9 +49,8 @@ export function toAdminProductDTO(p: ProductDetailRelations): AdminProductDTO {
 /** Compact admin list row. */
 export function toAdminProductListItem(p: ProductWithRelations): AdminProductListItem {
   return {
-    ...toProductSummaryDTO(p),
+    ...toProductSummaryDTO(p), // sku already included here
     isPublished: p.is_published,
-    sku: p.sku,
     brandId: p.brand_id,
     categoryId: p.category_id,
     createdAt: p.created_at,

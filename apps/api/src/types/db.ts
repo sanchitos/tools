@@ -57,6 +57,8 @@ export interface ProductRow {
   review_count: number;
   created_at: string;
   updated_at: string;
+  /** Generated column (0005_search.sql); never selected explicitly, kept here for honesty. */
+  search_vector?: string;
 }
 
 export interface ProductImageRow {

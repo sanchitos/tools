@@ -68,6 +68,7 @@ export function toProductSummaryDTO(p: ProductWithRelations): ProductSummaryDTO 
     id: p.id,
     slug: p.slug,
     name: p.name,
+    sku: p.sku,
     shortDescription: p.short_description,
     price: resolvePrice(p),
     currency: p.currency,
@@ -100,9 +101,8 @@ export function toProductDetailDTO(
   const specs = [...(p.specs ?? [])].sort(bySort);
   const highlights = [...(p.highlights ?? [])].sort(bySort);
   return {
-    ...toProductSummaryDTO(p),
+    ...toProductSummaryDTO(p), // sku already included here
     description: p.description,
-    sku: p.sku,
     images: images.map(toImageDTO),
     specs: specs.map(toSpecDTO),
     highlights: highlights.map(toHighlightDTO),

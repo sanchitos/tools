@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { ProductListQuery, ProductSort } from '@tools-jamaica/shared';
 import { api } from '../lib/api.js';
@@ -6,6 +7,7 @@ import { Button, Container, Loader, Select } from '../components/ui/index.js';
 import { ProductCard } from '../components/ProductCard.js';
 
 const PAGE_SIZE = 12;
+const SEARCH_DEBOUNCE_MS = 300;
 
 const SORT_OPTIONS = [
   { value: 'featured', label: 'Featured' },
@@ -13,6 +15,10 @@ const SORT_OPTIONS = [
   { value: 'price-desc', label: 'Price: High to Low' },
   { value: 'name', label: 'Name A–Z' },
 ];
+
+// Only offered while a search is active — relevance ranking has no meaning
+// against the plain browse listing (see catalog/service.ts listProductsPlain).
+const RELEVANCE_OPTION = { value: 'relevance', label: 'Relevance' };
 
 export default function ShopPage() {
   const [sp, setSp] = useSearchParams();
@@ -22,7 +28,10 @@ export default function ShopPage() {
   const selectedCategories = sp.getAll('category');
   const selectedBrands = sp.getAll('brand');
   const q = sp.get('q') ?? '';
-  const sort = (sp.get('sort') as ProductSort) || 'featured';
+  // Mirrors the server default in catalog/service.ts listProducts(): an unset
+  // sort defaults to relevance while searching, featured otherwise. An
+  // explicit ?sort= always wins over both.
+  const sort = (sp.get('sort') as ProductSort) || (q ? 'relevance' : 'featured');
   const inStock = sp.get('inStock') === 'true';
   const minPrice = sp.get('minPrice') ?? '';
   const maxPrice = sp.get('maxPrice') ?? '';
@@ -49,6 +58,22 @@ export default function ShopPage() {
     setSp(next, { replace: true });
   };
 
+  // Debounced search: typing updates local state immediately (so the input
+  // never lags), and only after a pause does it rewrite the URL — which is
+  // what re-triggers the fetch via useAsync's [sp.toString()] dep. Without
+  // this, every keystroke rewrote the URL and refired the query, and because
+  // useAsync flips `loading` on each call, the whole grid unmounted and
+  // flashed the Loader once per character.
+  const [searchInput, setSearchInput] = useState(q);
+  useEffect(() => setSearchInput(q), [q]); // stay in sync when q changes externally (e.g. Clear all)
+  useEffect(() => {
+    if (searchInput === q) return;
+    const handle = setTimeout(() => {
+      update((next) => (searchInput ? next.set('q', searchInput) : next.delete('q')));
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(handle);
+  }, [searchInput]); // deliberately not depending on `update`/`q`: this should only re-run when the user types
+
   const toggleMulti = (key: 'category' | 'brand', value: string) =>
     update((next) => {
       const values = next.getAll(key);
@@ -71,9 +96,9 @@ export default function ShopPage() {
       <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <input
           type="search"
-          value={q}
+          value={searchInput}
           placeholder="Search products…"
-          onChange={(e) => update((next) => (e.target.value ? next.set('q', e.target.value) : next.delete('q')))}
+          onChange={(e) => setSearchInput(e.target.value)}
           className="w-full rounded border border-border bg-surface px-3 py-2 text-body-md text-ink placeholder:text-ink-muted sm:max-w-xs"
         />
         <div className="flex items-center gap-2">
@@ -82,7 +107,7 @@ export default function ShopPage() {
             <Select
               ariaLabel="Sort products"
               value={sort}
-              options={SORT_OPTIONS}
+              options={q ? [RELEVANCE_OPTION, ...SORT_OPTIONS] : SORT_OPTIONS}
               onChange={(v) => update((next) => next.set('sort', v))}
             />
           </div>
@@ -96,7 +121,14 @@ export default function ShopPage() {
             <h2 className="text-label-lg font-semibold uppercase tracking-wide text-primary">Filters</h2>
             {activeFilters > 0 && (
               <button
-                onClick={() => setSp(new URLSearchParams(sort !== 'featured' ? { sort } : {}), { replace: true })}
+                onClick={() =>
+                  setSp(
+                    // Drop q too (search is a filter here), and don't carry over
+                    // 'relevance' — it's meaningless once the search is gone.
+                    new URLSearchParams(sort !== 'featured' && sort !== 'relevance' ? { sort } : {}),
+                    { replace: true },
+                  )
+                }
                 className="text-label-sm text-accent hover:underline"
               >
                 Clear all

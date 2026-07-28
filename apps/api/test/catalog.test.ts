@@ -4,7 +4,7 @@ import request from 'supertest';
 vi.mock('../src/lib/supabase.js', () => import('./helpers/mockSupabase.js'));
 
 import { createApp } from '../src/app.js';
-import { queueResult, resetMocks } from './helpers/mockSupabase.js';
+import { queueResult, queueRpc, resetMocks } from './helpers/mockSupabase.js';
 
 const app = createApp();
 
@@ -58,5 +58,44 @@ describe('catalog API', () => {
     const res = await request(app).get('/api/v1/products/nope');
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('GET /products?q= still paginates, routed through search_products (0005_search.sql)', async () => {
+    queueRpc('search_products', {
+      data: [{ product_id: 'p1', score: 1, total_count: 1 }],
+      error: null,
+    });
+    queueResult('products', { data: [productRow()], error: null });
+
+    const res = await request(app).get('/api/v1/products?q=door&page=1&pageSize=12');
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    expect(res.body.page).toBe(1);
+    expect(res.body.pageSize).toBe(12);
+    expect(res.body.items[0].slug).toBe('demo-product');
+  });
+
+  it('q + sort=price-asc paginates without duplicating rows across pages (reorders by RPC position, not score)', async () => {
+    // The RPC already applied ORDER BY price ASC + LIMIT/OFFSET server-side;
+    // the service must preserve THIS order when mapping ids back to rows,
+    // not re-sort by score (which would silently override an explicit sort).
+    queueRpc('search_products', {
+      data: [
+        { product_id: 'p-cheap', score: 0.1, total_count: 2 },
+        { product_id: 'p-pricey', score: 0.9, total_count: 2 },
+      ],
+      error: null,
+    });
+    queueResult('products', {
+      data: [
+        productRow({ id: 'p-pricey', slug: 'pricey', name: 'Pricey Door', price: '50000.00' }),
+        productRow({ id: 'p-cheap', slug: 'cheap', name: 'Cheap Door', price: '5000.00' }),
+      ],
+      error: null,
+    });
+
+    const res = await request(app).get('/api/v1/products?q=door&sort=price-asc&page=1&pageSize=2');
+    expect(res.status).toBe(200);
+    expect(res.body.items.map((i: { slug: string }) => i.slug)).toEqual(['cheap', 'pricey']);
   });
 });

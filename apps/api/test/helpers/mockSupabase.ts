@@ -18,6 +18,10 @@ let refreshResult: unknown = null;
 export function queueResult(table: string, result: QueryResult): void {
   (queues[table] ??= []).push(result);
 }
+/** Queue a result for `db.rpc(name, ...)`, e.g. queueRpc('search_products', {...}). */
+export function queueRpc(name: string, result: QueryResult): void {
+  (queues[`rpc:${name}`] ??= []).push(result);
+}
 export function setSignIn(result: unknown): void {
   signInResult = result;
 }
@@ -54,6 +58,9 @@ function builder(table: string) {
 
 export const db = {
   from: vi.fn((t: string) => builder(t)),
+  rpc: vi.fn((name: string, _args?: Record<string, unknown>) =>
+    Promise.resolve(take(`rpc:${name}`)),
+  ),
   auth: { admin: {} },
   storage: {},
 };

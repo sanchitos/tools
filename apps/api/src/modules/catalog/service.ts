@@ -7,6 +7,7 @@ import type {
 } from '@tools-jamaica/shared';
 import { db } from '../../lib/supabase.js';
 import { AppError } from '../../lib/errors.js';
+import { logger } from '../../lib/logger.js';
 import type { BrandRow, CategoryRow } from '../../types/db.js';
 import type { ProductListParams } from './schema.js';
 import {
@@ -39,13 +40,10 @@ async function idsForSlugs(table: 'categories' | 'brands', slugs: string[]): Pro
   return (data ?? []).map((r) => (r as { id: string }).id);
 }
 
-/** Neutralize characters that would break a PostgREST or()/ilike filter. */
-function sanitizeSearch(q: string): string {
-  return q.replace(/[,()%*]/g, ' ').trim();
-}
-
-export async function listProducts(
+/** Non-search product listing: filters + a plain PostgREST sort, no ranking. */
+async function listProductsPlain(
   params: ProductListParams,
+  sort: NonNullable<ProductListParams['sort']>,
 ): Promise<Paginated<ProductSummaryDTO>> {
   let query = db
     .from('products')
@@ -63,12 +61,8 @@ export async function listProducts(
   if (params.minPrice !== undefined) query = query.gte('price', params.minPrice);
   if (params.maxPrice !== undefined) query = query.lte('price', params.maxPrice);
   if (params.inStock) query = query.gt('stock', 0);
-  if (params.q) {
-    const s = sanitizeSearch(params.q);
-    if (s) query = query.or(`name.ilike.%${s}%,short_description.ilike.%${s}%`);
-  }
 
-  switch (params.sort) {
+  switch (sort) {
     case 'price-asc':
       query = query.order('price', { ascending: true });
       break;
@@ -78,7 +72,9 @@ export async function listProducts(
     case 'name':
       query = query.order('name', { ascending: true });
       break;
+    // 'relevance' has no meaning without a search query; fall back to 'featured'.
     case 'featured':
+    case 'relevance':
     default:
       query = query.order('featured', { ascending: false }).order('created_at', { ascending: false });
       break;
@@ -92,6 +88,82 @@ export async function listProducts(
 
   const items = (data as unknown as ProductWithRelations[]).map(toProductSummaryDTO);
   return { items, total: count ?? items.length, page: params.page, pageSize: params.pageSize };
+}
+
+interface SearchHit {
+  product_id: string;
+  score: number;
+  total_count: number;
+}
+
+/**
+ * Search-backed listing: ranks via the `search_products` RPC (0005_search.sql
+ * — full-text + trigram, see that file for why), then re-selects the ranked
+ * ids through the same PRODUCT_SELECT/mapper path as every other listing so
+ * resolvePrice() stays the single pricing authority and the RPC never becomes
+ * a second source of truth for product data.
+ */
+async function searchProducts(
+  params: ProductListParams,
+  q: string,
+  sort: NonNullable<ProductListParams['sort']>,
+): Promise<Paginated<ProductSummaryDTO>> {
+  const { data, error } = await db.rpc('search_products', {
+    p_q: q,
+    p_category_slugs: params.category?.length ? params.category : null, // [] means "match nothing" in SQL, not "no filter"
+    p_brand_slugs: params.brand?.length ? params.brand : null,
+    p_min_price: params.minPrice ?? null,
+    p_max_price: params.maxPrice ?? null,
+    p_in_stock: params.inStock ?? false,
+    p_sort: sort,
+    p_limit: params.pageSize,
+    p_offset: (params.page - 1) * params.pageSize,
+  });
+  if (error) fail('Failed to search products', error.message);
+
+  const hits = (data ?? []) as SearchHit[];
+  if (hits.length === 0) {
+    // Cheapest observability we have: this is the evidence that decides
+    // whether semantic search is ever worth building (see ARCHITECTURE §10 seam notes).
+    logger.info({ q }, 'catalog search returned no results');
+    return { items: [], total: 0, page: params.page, pageSize: params.pageSize };
+  }
+
+  const ids = hits.map((h) => h.product_id);
+  const { data: rows, error: rowErr } = await db
+    .from('products')
+    .select(PRODUCT_SELECT)
+    .eq('is_published', true) // re-assert: a row could be unpublished between the two queries
+    .in('id', ids);
+  if (rowErr) fail('Failed to load search results', rowErr.message);
+
+  // Reorder by RPC position, not by score: score-sorting would silently
+  // override an explicit sort=price-asc, and re-sorting the fetched page in
+  // JS would only be sorted-within-page (page 2's cheapest could be cheaper
+  // than page 1's). Position from the RPC is already correct for every sort.
+  const byId = new Map((rows as unknown as ProductWithRelations[]).map((r) => [r.id, r]));
+  const items = ids
+    .map((id) => byId.get(id))
+    .filter((r): r is ProductWithRelations => r !== undefined)
+    .map(toProductSummaryDTO);
+
+  return {
+    items,
+    total: Number(hits[0]!.total_count),
+    page: params.page,
+    pageSize: params.pageSize,
+  };
+}
+
+export async function listProducts(
+  params: ProductListParams,
+): Promise<Paginated<ProductSummaryDTO>> {
+  const q = params.q?.trim();
+  // Explicit user sort always wins. Relevance is only the *default* when the
+  // user hasn't chosen a sort and a search query is present (schema.ts drops
+  // the old server-side default for exactly this reason).
+  const sort = params.sort ?? (q ? 'relevance' : 'featured');
+  return q ? searchProducts(params, q, sort) : listProductsPlain(params, sort);
 }
 
 export async function getFeatured(limit = 8): Promise<ProductSummaryDTO[]> {

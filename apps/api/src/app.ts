@@ -11,8 +11,16 @@ import { csrfProtection } from './middleware/csrf.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { mountSpa } from './lib/serveSpa.js';
 
-/** Paths (under /api/v1) exempt from CSRF — they bootstrap/rotate the token. */
-const CSRF_EXEMPT = ['/api/v1/auth/login', '/api/v1/auth/refresh'];
+/**
+ * Paths (under /api/v1) exempt from CSRF. auth/login and auth/refresh
+ * bootstrap/rotate the token itself. /api/v1/agent is GET-only and
+ * authenticates via an explicit Bearer header no browser attaches
+ * cross-origin (see middleware/agentAuth.ts) — CSRF only protects ambient
+ * *cookie* auth, and csrfProtection already short-circuits on GET, so this
+ * entry is defensive: it keeps a future POST there from failing as an
+ * untraceable CSRF 403 instead of the agent-auth error it should be.
+ */
+const CSRF_EXEMPT = ['/api/v1/auth/login', '/api/v1/auth/refresh', '/api/v1/agent'];
 
 /**
  * Dev-only CORS: when the Vite dev server runs on its own origin we must allow

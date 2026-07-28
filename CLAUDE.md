@@ -63,7 +63,7 @@ Supabase SQL Editor, in order. Never run SQL against Supabase directly from code
 - **Never run SQL against Supabase.** Add the next numbered `.sql` in
   `apps/api/supabase/migrations/` and let the user run it manually in the SQL
   Editor. Make column adds idempotent (`add column if not exists`) when amending
-  a file the user may have already run. Latest migration: `0004_storage`.
+  a file the user may have already run. Latest migration: `0005_search`.
 - **Add a DTO field:** edit `packages/shared/src/index.ts`, then the relevant
   `mappers.ts` and the row type in `apps/api/src/types/db.ts`. Shared is consumed
   from source, so no rebuild is needed.

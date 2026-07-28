@@ -19,7 +19,10 @@ export const productListQuerySchema = z.object({
   maxPrice: z.coerce.number().nonnegative().optional(),
   inStock: boolParam,
   q: z.string().trim().min(1).max(120).optional(),
-  sort: z.enum(['featured', 'price-asc', 'price-desc', 'name']).default('featured'),
+  // No .default() here: the service must distinguish "user chose Featured"
+  // from "sent nothing" so it can default an unset sort to 'relevance' when
+  // `q` is present, without overriding an explicit choice.
+  sort: z.enum(['featured', 'price-asc', 'price-desc', 'name', 'relevance']).optional(),
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().positive().max(100).default(24),
 });

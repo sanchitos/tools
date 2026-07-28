@@ -25,6 +25,14 @@ const EnvSchema = z.object({
 
   // Dev-only CORS allowance when the Vite dev server runs on its own origin.
   WEB_ORIGIN: z.preprocess(emptyToUndefined, z.string().url().optional()),
+
+  // Machine-to-machine key for /api/v1/agent (e.g. the n8n WhatsApp agent).
+  // Optional, not required: this module `process.exit(1)`s on validation
+  // failure and test/setup.ts doesn't set it, so a required var would break
+  // `npm test` and every existing dev env. middleware/agentAuth.ts fails
+  // *closed* (404s the whole route) when this is unset, so an unconfigured
+  // deploy never leaves the endpoint open.
+  AGENT_API_KEY: z.preprocess(emptyToUndefined, z.string().min(32).optional()),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
