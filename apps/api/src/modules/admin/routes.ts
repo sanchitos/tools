@@ -4,6 +4,7 @@ import { ah, AppError } from '../../lib/errors.js';
 import { validate } from '../../middleware/validate.js';
 import { requireAuth, requireRole } from '../../middleware/auth.js';
 import {
+  adminOrderListQuerySchema,
   brandCreateSchema,
   brandUpdateSchema,
   categoryCreateSchema,
@@ -15,6 +16,7 @@ import {
   productListQuerySchema,
   productUpdateSchema,
   reorderSchema,
+  updateOrderStatusSchema,
 } from './schema.js';
 import * as svc from './service.js';
 
@@ -190,6 +192,31 @@ export function adminRouter(): Router {
     '/images/cleanup-orphans',
     ah(async (_req, res) => {
       res.json(await svc.cleanupOrphans());
+    }),
+  );
+
+  // --- Orders (read + status only — creation is the public checkout route) -
+  router.get(
+    '/orders',
+    ah(async (req, res) => {
+      res.json(await svc.listAdminOrders(adminOrderListQuerySchema.parse(req.query)));
+    }),
+  );
+
+  router.get(
+    '/orders/:id',
+    ah(async (req, res) => {
+      const { id } = idParamSchema.parse(req.params);
+      res.json(await svc.getAdminOrder(id));
+    }),
+  );
+
+  router.patch(
+    '/orders/:id',
+    validate({ body: updateOrderStatusSchema }),
+    ah(async (req, res) => {
+      const { id } = idParamSchema.parse(req.params);
+      res.json(await svc.updateOrderStatus(id, req.body.status));
     }),
   );
 

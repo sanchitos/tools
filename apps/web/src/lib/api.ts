@@ -1,11 +1,15 @@
 import type {
   AdminBrandDTO,
   AdminCategoryDTO,
+  AdminOrderListItem,
   AdminProductDTO,
   AdminProductListItem,
   ApiErrorBody,
   BrandDTO,
   CategoryDTO,
+  CreateOrderRequest,
+  OrderDTO,
+  OrderStatus,
   OrphanCleanupResult,
   Paginated,
   ProductDetailDTO,
@@ -166,6 +170,12 @@ export const api = {
   categories: () => request<CategoryDTO[]>('/categories'),
   brands: () => request<BrandDTO[]>('/brands'),
 
+  // --- Orders (guest checkout — public, no auth) ---
+  // No CSRF header needed: /api/v1/orders is exempt (see apps/api/src/app.ts) —
+  // a guest shopper never has the sw_csrf cookie in the first place.
+  createOrder: (body: CreateOrderRequest) =>
+    request<OrderDTO>('/orders', { method: 'POST', body }),
+
   // --- Auth ---
   login: (email: string, password: string) =>
     request<ProfileDTO>('/auth/login', { method: 'POST', body: { email, password }, _noRefresh: true }),
@@ -210,4 +220,11 @@ export const api = {
   // --- Admin: maintenance ---
   cleanupOrphans: () =>
     request<OrphanCleanupResult>('/admin/images/cleanup-orphans', { method: 'POST' }),
+
+  // --- Admin: orders ---
+  adminOrders: (query: { status?: OrderStatus; q?: string; page?: number; pageSize?: number } = {}) =>
+    request<Paginated<AdminOrderListItem>>('/admin/orders', { query }),
+  adminOrder: (id: string) => request<OrderDTO>(`/admin/orders/${id}`),
+  updateOrderStatus: (id: string, status: OrderStatus) =>
+    request<OrderDTO>(`/admin/orders/${id}`, { method: 'PATCH', body: { status } }),
 };

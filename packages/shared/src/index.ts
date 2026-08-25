@@ -208,3 +208,68 @@ export interface AgentSearchResult {
    */
   categories?: Array<Pick<CategoryDTO, 'slug' | 'label'>>;
 }
+
+// ---------------------------------------------------------------------------
+// Orders (guest cart checkout — Phase 1: no payments, no customer accounts)
+// ---------------------------------------------------------------------------
+
+export type OrderStatus = 'new' | 'confirmed' | 'fulfilled' | 'cancelled';
+export type Fulfillment = 'pickup' | 'delivery';
+
+/** A line item as it was AT ORDER TIME — a snapshot, not a live product join. */
+export interface OrderItemDTO {
+  id: string;
+  productId: string | null;
+  productName: string;
+  productSku: string | null;
+  productSlug: string | null;
+  imageUrl: string | null;
+  unitPrice: number;
+  quantity: number;
+  lineTotal: number;
+}
+
+export interface OrderDTO {
+  id: string;
+  orderNumber: string;
+  customerName: string;
+  customerPhone: string;
+  customerEmail: string | null;
+  fulfillment: Fulfillment;
+  deliveryAddress: string | null;
+  notes: string | null;
+  subtotal: number;
+  currency: Currency;
+  status: OrderStatus;
+  items: OrderItemDTO[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * What the browser is allowed to send to POST /orders. Deliberately carries no
+ * price or total — the server re-reads each product and prices the order
+ * itself via resolvePrice(); a client-supplied price is never trusted.
+ */
+export interface CreateOrderRequest {
+  customerName: string;
+  customerPhone: string;
+  customerEmail?: string;
+  fulfillment: Fulfillment;
+  deliveryAddress?: string;
+  notes?: string;
+  items: { productId: string; quantity: number }[];
+}
+
+/** Lightweight row for the admin orders list (no line items — itemCount instead). */
+export interface AdminOrderListItem {
+  id: string;
+  orderNumber: string;
+  customerName: string;
+  customerPhone: string;
+  itemCount: number;
+  subtotal: number;
+  currency: Currency;
+  status: OrderStatus;
+  createdAt: string;
+}

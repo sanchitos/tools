@@ -47,3 +47,19 @@ export const agentRateLimit = rateLimit({
     error: { code: 'RATE_LIMITED', message: 'Too many requests, try again shortly' },
   },
 });
+
+/**
+ * Rate limiter for POST /orders. Unlike catalog reads this is an
+ * unauthenticated *write* (the storefront cart has no login), so it gets a
+ * much tighter budget than browsing traffic — sized for a genuine shopper
+ * checking out a few times an hour, not for probing.
+ */
+export const orderRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: isTest ? 1000 : 10,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: {
+    error: { code: 'RATE_LIMITED', message: 'Too many orders submitted, try again later' },
+  },
+});

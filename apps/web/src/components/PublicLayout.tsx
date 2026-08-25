@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom';
 import { Header } from './Header.js';
 import { Footer } from './Footer.js';
 import { WhatsAppButton } from './WhatsAppButton.js';
+import { CartDrawer } from './CartDrawer.js';
 
 /** Chrome for all public storefront pages. */
 export function PublicLayout() {
@@ -13,6 +14,7 @@ export function PublicLayout() {
       </main>
       <Footer />
       <WhatsAppButton />
+      <CartDrawer />
     </div>
   );
 }

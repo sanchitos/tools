@@ -15,6 +15,7 @@ import {
 import { ProductCard } from '../components/ProductCard.js';
 import { formatPrice } from '../lib/format.js';
 import { PHONE_DISPLAY, PHONE_TEL, whatsappUrl } from '../lib/contact.js';
+import { useCart } from '../context/CartContext.js';
 
 const TRUST_STRIP = [
   { icon: 'truck' as const, label: 'Islandwide delivery' },
@@ -28,7 +29,9 @@ export default function ProductDetailPage() {
   const [activeImg, setActiveImg] = useState(0);
   const [tab, setTab] = useState<'description' | 'specs'>('description');
   const [barVisible, setBarVisible] = useState(false);
+  const [qty, setQtyState] = useState(1);
   const buyBoxRef = useRef<HTMLDivElement>(null);
+  const { add, open: openCart } = useCart();
 
   useEffect(() => {
     const el = buyBoxRef.current;
@@ -69,7 +72,15 @@ export default function ProductDetailPage() {
   const images = product.images.length ? product.images : product.primaryImage ? [product.primaryImage] : [];
   const active = images[activeImg] ?? product.primaryImage ?? null;
   const outOfStock = product.stock <= 0;
+  const maxQty = Math.max(1, product.stock);
   const enquiryMessage = `Hi, I'm interested in ${product.name} (${product.sku ?? product.slug}).`;
+
+  const setQty = (n: number) => setQtyState(Math.min(maxQty, Math.max(1, n)));
+  const addToCart = () => {
+    if (outOfStock) return;
+    add(product, qty);
+    openCart();
+  };
 
   return (
     <Container className="py-8">
@@ -164,20 +175,53 @@ export default function ProductDetailPage() {
           {/* Buy box */}
           <div ref={buyBoxRef} className="mt-6 rounded-card border border-border p-4 shadow-card">
             <h3 className="text-headline-sm text-ink">Get this product</h3>
+
+            {!outOfStock && (
+              <div className="mt-3 flex items-center gap-2">
+                <span className="text-label-sm font-semibold text-ink-muted">Quantity</span>
+                <div className="flex h-10 items-center rounded border border-border">
+                  <button
+                    onClick={() => setQty(qty - 1)}
+                    disabled={qty <= 1}
+                    aria-label="Decrease quantity"
+                    className="h-full px-3 text-ink disabled:opacity-40"
+                  >
+                    −
+                  </button>
+                  <span className="min-w-8 text-center text-body-md">{qty}</span>
+                  <button
+                    onClick={() => setQty(qty + 1)}
+                    disabled={qty >= maxQty}
+                    aria-label="Increase quantity"
+                    className="h-full px-3 text-ink disabled:opacity-40"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="mt-3 flex flex-col gap-2">
+              <button
+                onClick={addToCart}
+                disabled={outOfStock}
+                className="flex w-full items-center justify-center gap-2 rounded bg-primary py-3 text-label-lg font-semibold text-primary-fg transition-colors hover:bg-primary-dark disabled:pointer-events-none disabled:opacity-50"
+              >
+                <Icon name="cart" />
+                {outOfStock ? 'Out of stock' : 'Add to cart'}
+              </button>
               <a
                 href={whatsappUrl(enquiryMessage)}
                 target="_blank"
                 rel="noopener noreferrer"
-                aria-disabled={outOfStock}
-                className={`flex w-full items-center justify-center gap-2 rounded bg-primary py-3 text-label-lg font-semibold text-primary-fg transition-colors hover:bg-primary-dark ${outOfStock ? 'pointer-events-none opacity-50' : ''}`}
+                className="flex w-full items-center justify-center gap-2 rounded border-2 border-primary py-3 text-label-lg font-semibold text-primary hover:bg-surface-muted"
               >
                 <Icon name="whatsapp" />
                 Enquire on WhatsApp
               </a>
               <a
                 href={`tel:${PHONE_TEL}`}
-                className="flex w-full items-center justify-center gap-2 rounded border-2 border-primary py-3 text-label-lg font-semibold text-primary hover:bg-surface-muted"
+                className="flex w-full items-center justify-center gap-2 text-label-sm font-semibold text-ink-muted hover:text-primary"
               >
                 <Icon name="phone" />
                 Call {PHONE_DISPLAY}
@@ -213,16 +257,14 @@ export default function ProductDetailPage() {
             <span className="hidden text-headline-md font-bold text-accent sm:inline">
               {formatPrice(product.price)}
             </span>
-            <a
-              href={whatsappUrl(enquiryMessage)}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-disabled={outOfStock}
-              className={`flex shrink-0 items-center gap-2 rounded bg-primary px-4 py-2 text-label-sm font-semibold text-primary-fg hover:bg-primary-dark ${outOfStock ? 'pointer-events-none opacity-50' : ''}`}
+            <button
+              onClick={addToCart}
+              disabled={outOfStock}
+              className="flex shrink-0 items-center gap-2 rounded bg-primary px-4 py-2 text-label-sm font-semibold text-primary-fg hover:bg-primary-dark disabled:pointer-events-none disabled:opacity-50"
             >
-              <Icon name="whatsapp" />
-              Enquire
-            </a>
+              <Icon name="cart" />
+              {outOfStock ? 'Out of stock' : 'Add to cart'}
+            </button>
           </Container>
         </div>
       )}

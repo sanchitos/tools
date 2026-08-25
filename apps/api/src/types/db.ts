@@ -85,3 +85,33 @@ export interface ProductHighlightRow {
   text: string;
   sort_order: number;
 }
+
+export interface OrderRow {
+  id: string;
+  order_number: string;
+  customer_name: string;
+  customer_phone: string;
+  customer_email: string | null;
+  fulfillment: 'pickup' | 'delivery';
+  delivery_address: string | null;
+  notes: string | null;
+  subtotal: string; // NUMERIC comes back as string from supabase-js
+  currency: 'JMD';
+  status: 'new' | 'confirmed' | 'fulfilled' | 'cancelled';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrderItemRow {
+  id: string;
+  order_id: string;
+  product_id: string | null;
+  product_name: string;
+  product_sku: string | null;
+  product_slug: string | null;
+  image_url: string | null;
+  unit_price: string; // NUMERIC
+  quantity: number;
+  line_total: string; // NUMERIC
+  created_at: string;
+}

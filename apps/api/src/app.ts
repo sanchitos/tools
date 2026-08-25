@@ -19,8 +19,19 @@ import { mountSpa } from './lib/serveSpa.js';
  * *cookie* auth, and csrfProtection already short-circuits on GET, so this
  * entry is defensive: it keeps a future POST there from failing as an
  * untraceable CSRF 403 instead of the agent-auth error it should be.
+ * /api/v1/orders is the guest-cart checkout: the `sw_csrf` cookie is only ever
+ * issued by setSession() on login/refresh, so an anonymous shopper never has
+ * one, and CSRF exists to stop an attacker riding a victim's *ambient session*
+ * — which a guest order has none of. orderRateLimit (see middleware/rateLimit.ts)
+ * is the real control on this endpoint, not CSRF. Admin order mutations are
+ * NOT exempt — they stay behind the normal cookie+CSRF admin session.
  */
-const CSRF_EXEMPT = ['/api/v1/auth/login', '/api/v1/auth/refresh', '/api/v1/agent'];
+const CSRF_EXEMPT = [
+  '/api/v1/auth/login',
+  '/api/v1/auth/refresh',
+  '/api/v1/agent',
+  '/api/v1/orders',
+];
 
 /**
  * Dev-only CORS: when the Vite dev server runs on its own origin we must allow

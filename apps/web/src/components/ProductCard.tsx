@@ -5,7 +5,7 @@ import { Badge } from './ui/Badge.js';
 import { Icon } from './ui/Icon.js';
 import { Stars } from './ui/Stars.js';
 import { formatPrice } from '../lib/format.js';
-import { whatsappUrl } from '../lib/contact.js';
+import { useCart } from '../context/CartContext.js';
 
 /**
  * Walmart-anatomy product card: image -> brand -> CTA -> price -> title -> rating -> meta.
@@ -14,13 +14,14 @@ import { whatsappUrl } from '../lib/contact.js';
 export function ProductCard({ product }: { product: ProductSummaryDTO }) {
   const outOfStock = product.stock <= 0;
   const lowStock = !outOfStock && product.stock <= 5;
+  const { add, open: openCart } = useCart();
 
-  const enquire = (e: React.MouseEvent) => {
+  const addToCart = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (outOfStock) return;
-    const message = `Hi, I'm interested in ${product.name} (${product.sku ?? product.slug}).`;
-    window.open(whatsappUrl(message), '_blank', 'noopener');
+    add(product, 1);
+    openCart();
   };
 
   return (
@@ -58,12 +59,12 @@ export function ProductCard({ product }: { product: ProductSummaryDTO }) {
 
       <button
         type="button"
-        onClick={enquire}
+        onClick={addToCart}
         disabled={outOfStock}
         className="mt-2 inline-flex w-fit items-center gap-1 rounded bg-primary px-3 py-1.5 text-label-sm font-semibold text-primary-fg transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-60"
       >
-        <Icon name="whatsapp" />
-        Enquire
+        <Icon name="cart" />
+        {outOfStock ? 'Out of stock' : 'Add'}
       </button>
 
       <span className="mt-2 text-headline-md font-bold text-accent">{formatPrice(product.price)}</span>

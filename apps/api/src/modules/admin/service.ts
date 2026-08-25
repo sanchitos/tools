@@ -523,3 +523,12 @@ export async function cleanupOrphans(): Promise<OrphanCleanupResult> {
   await removeObjects(orphans);
   return { deleted: orphans.length, paths: orphans };
 }
+
+// ===========================================================================
+// Orders (read + status transitions only — creation is the public checkout
+// flow in modules/orders). Re-exported here rather than duplicated so the
+// admin router can import everything from this one service module like every
+// other section above, without a second copy of the order-fetching logic.
+// ===========================================================================
+
+export { listAdminOrders, getAdminOrder, updateOrderStatus } from '../orders/service.js';

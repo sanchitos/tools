@@ -1,5 +1,10 @@
 import { z } from 'zod';
 
+// The admin orders endpoints validate with the same schemas the public
+// checkout route uses — re-exported here so admin/routes.ts can import
+// everything it needs from this one module, like every other section below.
+export { adminOrderListQuerySchema, updateOrderStatusSchema } from '../orders/schema.js';
+
 const uuid = z.string().uuid();
 const nullableStr = z.string().trim().max(4000).nullable();
 

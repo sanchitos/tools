@@ -26,6 +26,7 @@ export function AdminLayout() {
           <span className="ml-1 text-label-sm font-normal uppercase tracking-wide text-white/60">Admin</span>
         </div>
         <nav className="flex-1 space-y-1 px-3">
+          <NavLink to="/admin/orders" className={link}>Orders</NavLink>
           <NavLink to="/admin" end className={link}>Products</NavLink>
           <NavLink to="/admin/categories" className={link}>Categories</NavLink>
           <NavLink to="/admin/brands" className={link}>Brands</NavLink>

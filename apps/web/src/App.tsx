@@ -4,12 +4,17 @@ import { AdminLayout } from './components/admin/AdminLayout.js';
 import HomePage from './pages/HomePage.js';
 import ShopPage from './pages/ShopPage.js';
 import ProductDetailPage from './pages/ProductDetailPage.js';
+import CartPage from './pages/CartPage.js';
+import CheckoutPage from './pages/CheckoutPage.js';
+import OrderConfirmationPage from './pages/OrderConfirmationPage.js';
 import NotFoundPage from './pages/NotFoundPage.js';
 import AdminLoginPage from './pages/admin/AdminLoginPage.js';
 import AdminProductsPage from './pages/admin/AdminProductsPage.js';
 import ProductEditorPage from './pages/admin/ProductEditorPage.js';
 import AdminCategoriesPage from './pages/admin/AdminCategoriesPage.js';
 import AdminBrandsPage from './pages/admin/AdminBrandsPage.js';
+import AdminOrdersPage from './pages/admin/AdminOrdersPage.js';
+import AdminOrderDetailPage from './pages/admin/AdminOrderDetailPage.js';
 
 /** Route table: public storefront (Stitch design) + admin back-office (gated). */
 export default function App() {
@@ -20,6 +25,9 @@ export default function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/shop" element={<ShopPage />} />
         <Route path="/product/:slug" element={<ProductDetailPage />} />
+        <Route path="/cart" element={<CartPage />} />
+        <Route path="/checkout" element={<CheckoutPage />} />
+        <Route path="/order/:orderNumber" element={<OrderConfirmationPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
 
@@ -31,6 +39,8 @@ export default function App() {
         <Route path="products/:id" element={<ProductEditorPage />} />
         <Route path="categories" element={<AdminCategoriesPage />} />
         <Route path="brands" element={<AdminBrandsPage />} />
+        <Route path="orders" element={<AdminOrdersPage />} />
+        <Route path="orders/:id" element={<AdminOrderDetailPage />} />
       </Route>
     </Routes>
   );

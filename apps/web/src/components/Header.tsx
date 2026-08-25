@@ -5,6 +5,7 @@ import { Icon } from './ui/Icon.js';
 import { IconButton } from './ui/IconButton.js';
 import { DepartmentDrawer } from './DepartmentDrawer.js';
 import { PHONE_DISPLAY, PHONE_TEL, WHATSAPP_URL } from '../lib/contact.js';
+import { useCart } from '../context/CartContext.js';
 
 /** Public site header: three sticky tiers (utility / brand+search / promo). */
 export function Header() {
@@ -12,6 +13,7 @@ export function Header() {
   const [searchValue, setSearchValue] = useState('');
   const navigate = useNavigate();
   const location = useLocation();
+  const { count, open: openCart } = useCart();
 
   useEffect(() => {
     setMenuOpen(false);
@@ -104,6 +106,22 @@ export function Header() {
               <Icon name="user" className="text-xl" />
               <span className="hidden lg:inline">Admin</span>
             </Link>
+            <button
+              type="button"
+              onClick={openCart}
+              aria-label={`Cart, ${count} ${count === 1 ? 'item' : 'items'}`}
+              className="relative flex items-center gap-1.5 text-label-sm font-semibold hover:text-accent"
+            >
+              <span className="relative">
+                <Icon name="cart" className="text-xl" />
+                {count > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1 text-label-xs text-accent-fg">
+                    {count}
+                  </span>
+                )}
+              </span>
+              <span className="hidden lg:inline">Cart</span>
+            </button>
           </nav>
         </Container>
 
