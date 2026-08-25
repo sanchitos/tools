@@ -2,25 +2,47 @@ import { Link } from 'react-router-dom';
 import type { ProductSummaryDTO } from '@tools-jamaica/shared';
 import { ImageWithFallback } from './ui/ImageWithFallback.js';
 import { Badge } from './ui/Badge.js';
+import { Icon } from './ui/Icon.js';
+import { Stars } from './ui/Stars.js';
 import { formatPrice } from '../lib/format.js';
+import { whatsappUrl } from '../lib/contact.js';
 
-/** Product card for the featured rail + shop grid. Flat, 1px border, orange price. */
+/**
+ * Walmart-anatomy product card: image -> brand -> CTA -> price -> title -> rating -> meta.
+ * The CTA sits above the price and the title below it, deliberately (see plan).
+ */
 export function ProductCard({ product }: { product: ProductSummaryDTO }) {
   const outOfStock = product.stock <= 0;
+  const lowStock = !outOfStock && product.stock <= 5;
+
+  const enquire = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (outOfStock) return;
+    const message = `Hi, I'm interested in ${product.name} (${product.sku ?? product.slug}).`;
+    window.open(whatsappUrl(message), '_blank', 'noopener');
+  };
+
   return (
     <Link
       to={`/product/${product.slug}`}
-      className="group flex flex-col overflow-hidden rounded-card border border-border bg-surface transition-shadow hover:shadow-pop focus-visible:shadow-pop"
+      className="group flex h-full flex-col rounded-card bg-surface p-3 pb-4 shadow-card transition-shadow hover:shadow-pop focus-visible:shadow-pop"
     >
-      <div className="relative">
+      <div className="relative aspect-square">
         <ImageWithFallback
           src={product.primaryImage?.url}
           alt={product.primaryImage?.altText ?? product.name}
-          className="aspect-square"
+          className="h-full w-full"
+          imgClassName="object-contain p-2"
         />
         {product.featured && (
-          <Badge tone="accent" className="absolute left-3 top-3">
+          <Badge tone="accent" className="absolute left-2 top-2 text-label-xs">
             Featured
+          </Badge>
+        )}
+        {!product.featured && lowStock && (
+          <Badge tone="error" className="absolute left-2 top-2 text-label-xs">
+            Low stock
           </Badge>
         )}
         {outOfStock && (
@@ -29,23 +51,31 @@ export function ProductCard({ product }: { product: ProductSummaryDTO }) {
           </span>
         )}
       </div>
-      <div className="flex flex-1 flex-col p-4">
-        {product.category && (
-          <span className="text-label-sm font-semibold uppercase tracking-wide text-ink-muted">
-            {product.category.label}
-          </span>
-        )}
-        <h3 className="mt-1 line-clamp-2 font-display text-body-md font-bold text-primary">
-          {product.name}
-        </h3>
-        <div className="mt-auto flex items-end justify-between pt-3">
-          <span className="text-headline-md font-bold text-accent">{formatPrice(product.price)}</span>
-          <span className="flex h-9 w-9 items-center justify-center rounded bg-primary text-primary-fg transition-colors group-hover:bg-accent" aria-hidden="true">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M5 12h14M13 6l6 6-6 6" />
-            </svg>
-          </span>
-        </div>
+
+      <span className="mt-3 text-body-xs font-semibold text-ink-muted">
+        Sold by {product.brand?.name ?? 'Tools Jamaica'}
+      </span>
+
+      <button
+        type="button"
+        onClick={enquire}
+        disabled={outOfStock}
+        className="mt-2 inline-flex w-fit items-center gap-1 rounded bg-primary px-3 py-1.5 text-label-sm font-semibold text-primary-fg transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-60"
+      >
+        <Icon name="whatsapp" />
+        Enquire
+      </button>
+
+      <span className="mt-2 text-headline-md font-bold text-accent">{formatPrice(product.price)}</span>
+
+      <h3 className="mt-1 line-clamp-2 text-body-sm text-ink">{product.name}</h3>
+
+      <div className="mt-1">
+        <Stars rating={product.rating} count={product.reviewCount} size="sm" />
+      </div>
+
+      <div className="mt-auto flex items-center justify-between border-t border-border pt-2 text-label-xs text-ink-muted">
+        {product.sku ? <span>SKU: {product.sku}</span> : <span>{product.category?.label ?? ''}</span>}
       </div>
     </Link>
   );

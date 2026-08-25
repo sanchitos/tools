@@ -1,15 +1,57 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { useAsync } from '../lib/useAsync.js';
-import { Badge, Container, ImageWithFallback, Loader } from '../components/ui/index.js';
+import {
+  Badge,
+  Breadcrumbs,
+  Container,
+  ImageWithFallback,
+  Icon,
+  Loader,
+  Rail,
+  Stars,
+} from '../components/ui/index.js';
 import { ProductCard } from '../components/ProductCard.js';
 import { formatPrice } from '../lib/format.js';
+import { PHONE_DISPLAY, PHONE_TEL, whatsappUrl } from '../lib/contact.js';
+
+const TRUST_STRIP = [
+  { icon: 'truck' as const, label: 'Islandwide delivery' },
+  { icon: 'shield' as const, label: 'Genuine brands only' },
+  { icon: 'headset' as const, label: 'Expert advice by phone' },
+];
 
 export default function ProductDetailPage() {
   const { slug = '' } = useParams();
   const { data: product, loading, error } = useAsync(() => api.product(slug), [slug]);
   const [activeImg, setActiveImg] = useState(0);
+  const [tab, setTab] = useState<'description' | 'specs'>('description');
+  const [barVisible, setBarVisible] = useState(false);
+  const buyBoxRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = buyBoxRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry) setBarVisible(!entry.isIntersecting);
+      },
+      { rootMargin: '-64px 0px 0px 0px' },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [product]);
+
+  useEffect(() => {
+    document.body.classList.toggle('has-sticky-buybar', barVisible);
+    return () => document.body.classList.remove('has-sticky-buybar');
+  }, [barVisible]);
+
+  useEffect(() => {
+    if (product && !product.description && product.specs.length > 0) setTab('specs');
+  }, [product]);
 
   if (loading) return <Loader className="min-h-[50vh]" />;
   if (error || !product) {
@@ -27,32 +69,26 @@ export default function ProductDetailPage() {
   const images = product.images.length ? product.images : product.primaryImage ? [product.primaryImage] : [];
   const active = images[activeImg] ?? product.primaryImage ?? null;
   const outOfStock = product.stock <= 0;
+  const enquiryMessage = `Hi, I'm interested in ${product.name} (${product.sku ?? product.slug}).`;
 
   return (
-    <Container className="py-10">
-      {/* Breadcrumb */}
-      <nav className="mb-6 text-label-sm text-ink-muted">
-        <Link to="/shop" className="hover:text-primary">Shop</Link>
-        {product.category && (
-          <>
-            <span className="mx-2">/</span>
-            <Link to={`/shop?category=${product.category.slug}`} className="hover:text-primary">
-              {product.category.label}
-            </Link>
-          </>
-        )}
-      </nav>
+    <Container className="py-8">
+      <Breadcrumbs
+        items={[
+          { label: 'Home', to: '/' },
+          { label: 'Shop', to: '/shop' },
+          ...(product.category
+            ? [{ label: product.category.label, to: `/shop?category=${product.category.slug}` }]
+            : []),
+          { label: product.name },
+        ]}
+      />
 
-      <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
+      <div className="mt-6 grid grid-cols-1 gap-10 lg:grid-cols-[58fr_37fr]">
         {/* Gallery */}
-        <div>
-          <ImageWithFallback
-            src={active?.url}
-            alt={active?.altText ?? product.name}
-            className="aspect-square rounded-card border border-border"
-          />
+        <div className="flex flex-col-reverse gap-3 lg:flex-row">
           {images.length > 1 && (
-            <div className="mt-3 flex gap-3 overflow-x-auto">
+            <div className="flex gap-2 overflow-x-auto lg:w-20 lg:shrink-0 lg:flex-col lg:overflow-visible">
               {images.map((img, i) => (
                 <button
                   key={img.id}
@@ -60,94 +96,193 @@ export default function ProductDetailPage() {
                   className={`h-20 w-20 shrink-0 overflow-hidden rounded border-2 ${i === activeImg ? 'border-primary' : 'border-border'}`}
                   aria-label={`View image ${i + 1}`}
                 >
-                  <ImageWithFallback src={img.url} alt={img.altText ?? ''} className="h-full w-full" />
+                  <ImageWithFallback src={img.url} alt={img.altText ?? ''} className="h-full w-full" imgClassName="object-contain" />
                 </button>
               ))}
             </div>
           )}
+          <div className="relative flex-1">
+            <ImageWithFallback
+              src={active?.url}
+              alt={active?.altText ?? product.name}
+              className="aspect-square rounded-card border border-border"
+              imgClassName="object-contain p-4"
+            />
+            {images.length > 1 && (
+              <>
+                <button
+                  aria-label="Previous image"
+                  onClick={() => setActiveImg((i) => (i - 1 + images.length) % images.length)}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full border border-border bg-surface/90 p-2 shadow-sm hover:bg-surface"
+                >
+                  <Icon name="chevronLeft" className="text-xl text-ink" />
+                </button>
+                <button
+                  aria-label="Next image"
+                  onClick={() => setActiveImg((i) => (i + 1) % images.length)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full border border-border bg-surface/90 p-2 shadow-sm hover:bg-surface"
+                >
+                  <Icon name="chevronRight" className="text-xl text-ink" />
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Info */}
         <div>
-          {product.brand && (
-            <span className="text-label-lg font-semibold uppercase tracking-wide text-ink-muted">
-              {product.brand.name}
-            </span>
+          {product.sku && <span className="text-label-xs text-ink-muted">SKU: {product.sku}</span>}
+          <h1 className="mt-1 font-display text-headline-sm font-bold text-ink">{product.name}</h1>
+          <p className="mt-1 text-body-sm text-ink-muted">Sold by {product.brand?.name ?? 'Tools Jamaica'}</p>
+
+          {product.reviewCount > 0 && (
+            <div className="mt-2">
+              <Stars rating={product.rating} count={product.reviewCount} />
+            </div>
           )}
-          <h1 className="mt-1 font-display text-headline-lg text-primary">{product.name}</h1>
 
           <div className="mt-4 flex items-center gap-3">
-            <span className="text-display-lg font-bold text-accent">{formatPrice(product.price)}</span>
-            {outOfStock ? (
-              <Badge tone="error">Out of stock</Badge>
-            ) : (
-              <Badge tone="success">In stock</Badge>
-            )}
+            <span className="text-display-md font-bold text-accent">{formatPrice(product.price)}</span>
+            {outOfStock ? <Badge tone="error">Out of stock</Badge> : <Badge tone="success">In stock</Badge>}
           </div>
 
           {product.shortDescription && (
-            <p className="mt-4 text-body-lg text-ink-muted">{product.shortDescription}</p>
+            <p className="mt-4 text-body-md text-ink-muted">{product.shortDescription}</p>
           )}
 
           {product.highlights.length > 0 && (
-            <ul className="mt-6 space-y-2">
+            <ul className="mt-5 space-y-2">
               {product.highlights.map((h) => (
-                <li key={h.id} className="flex items-start gap-2 text-body-md text-ink">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="mt-1 shrink-0 text-accent">
-                    <path d="m5 13 4 4L19 7" />
-                  </svg>
+                <li key={h.id} className="flex items-start gap-2 text-body-sm text-ink">
+                  <Icon name="check" className="mt-0.5 shrink-0 text-accent" />
                   {h.text}
                 </li>
               ))}
             </ul>
           )}
 
-          <div className="mt-8 flex flex-wrap gap-3">
-            <span className="rounded bg-surface-muted px-4 py-3 text-body-md text-ink-muted">
-              {product.sku ? `SKU: ${product.sku}` : 'Contact us to order'}
-            </span>
+          {/* Buy box */}
+          <div ref={buyBoxRef} className="mt-6 rounded-card border border-border p-4 shadow-card">
+            <h3 className="text-headline-sm text-ink">Get this product</h3>
+            <div className="mt-3 flex flex-col gap-2">
+              <a
+                href={whatsappUrl(enquiryMessage)}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-disabled={outOfStock}
+                className={`flex w-full items-center justify-center gap-2 rounded bg-primary py-3 text-label-lg font-semibold text-primary-fg transition-colors hover:bg-primary-dark ${outOfStock ? 'pointer-events-none opacity-50' : ''}`}
+              >
+                <Icon name="whatsapp" />
+                Enquire on WhatsApp
+              </a>
+              <a
+                href={`tel:${PHONE_TEL}`}
+                className="flex w-full items-center justify-center gap-2 rounded border-2 border-primary py-3 text-label-lg font-semibold text-primary hover:bg-surface-muted"
+              >
+                <Icon name="phone" />
+                Call {PHONE_DISPLAY}
+              </a>
+            </div>
+          </div>
+
+          {/* Trust strip */}
+          <div className="mt-6 space-y-2">
+            {TRUST_STRIP.map((t) => (
+              <div key={t.label} className="flex items-center gap-2 text-body-sm text-ink-muted">
+                <Icon name={t.icon} className="text-primary" />
+                {t.label}
+              </div>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* Description + specs */}
+      {/* Sticky mini buy-bar */}
+      {barVisible && (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface p-3 shadow-pop lg:bottom-auto lg:top-16">
+          <Container className="flex items-center gap-3">
+            <div className="hidden h-10 w-10 shrink-0 overflow-hidden rounded sm:block">
+              <ImageWithFallback
+                src={product.primaryImage?.url}
+                alt=""
+                className="h-full w-full"
+                imgClassName="object-contain"
+              />
+            </div>
+            <span className="line-clamp-1 flex-1 text-body-sm font-semibold text-ink">{product.name}</span>
+            <span className="hidden text-headline-md font-bold text-accent sm:inline">
+              {formatPrice(product.price)}
+            </span>
+            <a
+              href={whatsappUrl(enquiryMessage)}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-disabled={outOfStock}
+              className={`flex shrink-0 items-center gap-2 rounded bg-primary px-4 py-2 text-label-sm font-semibold text-primary-fg hover:bg-primary-dark ${outOfStock ? 'pointer-events-none opacity-50' : ''}`}
+            >
+              <Icon name="whatsapp" />
+              Enquire
+            </a>
+          </Container>
+        </div>
+      )}
+
+      {/* Description / Specifications */}
       {(product.description || product.specs.length > 0) && (
-        <div className="mt-14 grid grid-cols-1 gap-10 lg:grid-cols-2">
-          {product.description && (
-            <div>
-              <h2 className="font-display text-headline-md text-primary">Description</h2>
-              <p className="mt-3 whitespace-pre-line text-body-md leading-relaxed text-ink-muted">
+        <div className="mx-auto mt-14 max-w-4xl rounded-card border border-border bg-surface p-6">
+          <div className="flex justify-center gap-8 border-b border-border">
+            {product.description && (
+              <button
+                onClick={() => setTab('description')}
+                className={`pb-3 text-label-lg font-semibold ${tab === 'description' ? 'border-b-2 border-primary text-primary' : 'text-ink-muted'}`}
+              >
+                Description
+              </button>
+            )}
+            {product.specs.length > 0 && (
+              <button
+                onClick={() => setTab('specs')}
+                className={`pb-3 text-label-lg font-semibold ${tab === 'specs' ? 'border-b-2 border-primary text-primary' : 'text-ink-muted'}`}
+              >
+                Specifications
+              </button>
+            )}
+          </div>
+
+          <div className="pt-6">
+            {tab === 'description' && product.description && (
+              <p className="whitespace-pre-line text-body-md leading-relaxed text-ink-muted">
                 {product.description}
               </p>
-            </div>
-          )}
-          {product.specs.length > 0 && (
-            <div>
-              <h2 className="font-display text-headline-md text-primary">Specifications</h2>
-              <table className="mt-3 w-full border-collapse text-body-md">
+            )}
+            {tab === 'specs' && product.specs.length > 0 && (
+              <table className="w-full border-collapse text-body-md">
                 <tbody>
                   {product.specs.map((s, i) => (
                     <tr key={s.id} className={i % 2 ? 'bg-surface-muted' : ''}>
-                      <th className="w-1/2 border border-border px-3 py-2 text-left font-semibold text-ink">{s.label}</th>
+                      <th className="w-1/2 border border-border px-3 py-2 text-left font-semibold text-ink">
+                        {s.label}
+                      </th>
                       <td className="border border-border px-3 py-2 text-ink-muted">{s.value}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
 
       {/* Related */}
       {product.related.length > 0 && (
         <div className="mt-16">
-          <h2 className="mb-6 font-display text-headline-lg text-primary">Related products</h2>
-          <div className="grid grid-cols-1 gap-gutter sm:grid-cols-2 lg:grid-cols-4">
+          <Rail title="Recommended products">
             {product.related.map((p) => (
-              <ProductCard key={p.id} product={p} />
+              <div key={p.id} className="w-[220px] shrink-0 snap-start">
+                <ProductCard product={p} />
+              </div>
             ))}
-          </div>
+          </Rail>
         </div>
       )}
     </Container>

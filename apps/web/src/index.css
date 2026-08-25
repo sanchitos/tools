@@ -29,3 +29,11 @@
     --tw-ring-offset-color: var(--color-background);
   }
 }
+
+/* Nudges the WhatsApp FAB up on mobile while a PDP's sticky mini buy-bar is
+   pinned to the bottom, so the two never overlap. Toggled from ProductDetailPage. */
+@media (max-width: 1023px) {
+  body.has-sticky-buybar .whatsapp-fab {
+    bottom: 5.5rem;
+  }
+}

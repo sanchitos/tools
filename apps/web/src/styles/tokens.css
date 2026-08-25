@@ -77,9 +77,10 @@
   --shadow-sm: 0 1px 2px 0 rgb(11 28 48 / 0.06);
   --shadow-hard: 0 2px 0 0 rgb(11 28 48 / 0.08); /* "workbench" edge */
   --shadow-pop: 0 6px 16px -4px rgb(11 28 48 / 0.18); /* dropdowns/modals */
+  --shadow-card: 0 3px 8px 0 rgb(11 28 48 / 0.12); /* ambient card shadow, navy-tinted */
 
   /* --- Layout ------------------------------------------------------------- */
-  --container-max: 1280px;
+  --container-max: 1440px; /* denser, near-full-bleed retail layout */
   --gutter: 24px;
   --space-base: 8px;
 }

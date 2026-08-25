@@ -8,7 +8,7 @@ export function WhatsAppButton() {
       target="_blank"
       rel="noopener noreferrer"
       aria-label="Chat with us on WhatsApp"
-      className="group fixed bottom-6 right-6 z-50 flex items-center gap-2"
+      className="whatsapp-fab group fixed bottom-6 right-6 z-50 flex items-center gap-2 transition-[bottom] duration-200"
     >
       {/* Label expands on hover/focus (hidden on touch, where there's no hover). */}
       <span className="pointer-events-none max-w-0 overflow-hidden whitespace-nowrap rounded-full bg-primary py-2.5 text-label-lg font-semibold text-primary-fg opacity-0 shadow-pop transition-all duration-300 group-hover:max-w-[180px] group-hover:px-4 group-hover:opacity-100 group-focus-visible:max-w-[180px] group-focus-visible:px-4 group-focus-visible:opacity-100">

@@ -3,10 +3,18 @@ import { useSearchParams } from 'react-router-dom';
 import type { ProductListQuery, ProductSort } from '@tools-jamaica/shared';
 import { api } from '../lib/api.js';
 import { useAsync } from '../lib/useAsync.js';
-import { Button, Container, Loader, Select } from '../components/ui/index.js';
+import {
+  Breadcrumbs,
+  Container,
+  Drawer,
+  Pagination,
+  Select,
+  Skeleton,
+} from '../components/ui/index.js';
 import { ProductCard } from '../components/ProductCard.js';
+import { ShopFilters } from '../components/ShopFilters.js';
 
-const PAGE_SIZE = 12;
+const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
 
 const SORT_OPTIONS = [
@@ -24,6 +32,7 @@ export default function ShopPage() {
   const [sp, setSp] = useSearchParams();
   const categories = useAsync(() => api.categories(), []);
   const brands = useAsync(() => api.brands(), []);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const selectedCategories = sp.getAll('category');
   const selectedBrands = sp.getAll('brand');
@@ -83,118 +92,167 @@ export default function ShopPage() {
       if (!has) next.append(key, value);
     });
 
+  const clearAll = () =>
+    setSp(
+      // Drop q too (search is a filter here), and don't carry over
+      // 'relevance' — it's meaningless once the search is gone.
+      new URLSearchParams(sort !== 'featured' && sort !== 'relevance' ? { sort } : {}),
+      { replace: true },
+    );
+
   const total = products.data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const activeFilters =
     selectedCategories.length + selectedBrands.length + (inStock ? 1 : 0) + (minPrice || maxPrice ? 1 : 0);
 
-  return (
-    <Container className="py-10">
-      <h1 className="font-display text-headline-lg text-primary">Shop</h1>
+  const activeCategoryLabel =
+    selectedCategories.length === 1
+      ? (categories.data ?? []).find((c) => c.slug === selectedCategories[0])?.label
+      : undefined;
 
-      {/* Top bar: search + sort */}
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <input
-          type="search"
-          value={searchInput}
-          placeholder="Search products…"
-          onChange={(e) => setSearchInput(e.target.value)}
-          className="w-full rounded border border-border bg-surface px-3 py-2 text-body-md text-ink placeholder:text-ink-muted sm:max-w-xs"
-        />
-        <div className="flex items-center gap-2">
-          <span className="text-label-sm font-semibold uppercase tracking-wide text-ink-muted">Sort</span>
-          <div className="w-52">
+  const filtersProps = {
+    categories: categories.data ?? [],
+    brands: brands.data ?? [],
+    selectedCategories,
+    selectedBrands,
+    minPrice,
+    maxPrice,
+    inStock,
+    onToggleCategory: (slug: string) => toggleMulti('category', slug),
+    onToggleBrand: (slug: string) => toggleMulti('brand', slug),
+    onMinPriceChange: (v: string) => update((next) => (v ? next.set('minPrice', v) : next.delete('minPrice'))),
+    onMaxPriceChange: (v: string) => update((next) => (v ? next.set('maxPrice', v) : next.delete('maxPrice'))),
+    onToggleInStock: () => update((next) => (inStock ? next.delete('inStock') : next.set('inStock', 'true'))),
+  };
+
+  return (
+    <Container className="py-6">
+      <Breadcrumbs
+        items={[
+          { label: 'Home', to: '/' },
+          { label: 'Shop', to: activeCategoryLabel ? '/shop' : undefined },
+          ...(activeCategoryLabel ? [{ label: activeCategoryLabel }] : []),
+        ]}
+      />
+      <h1 className="mt-2 font-display text-headline-lg text-primary">Shop</h1>
+
+      {/* Subcategory chip rail */}
+      {(categories.data ?? []).length > 0 && (
+        <div className="mt-4 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {(categories.data ?? []).map((c) => {
+            const selected = selectedCategories.includes(c.slug);
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => toggleMulti('category', c.slug)}
+                className={`h-10 shrink-0 whitespace-nowrap rounded border px-4 text-body-xs transition-colors ${
+                  selected
+                    ? 'border-primary bg-surface-strong font-semibold text-primary'
+                    : 'border-border text-ink-muted hover:border-border-strong'
+                }`}
+              >
+                {c.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Controls row */}
+      <div className="mt-6">
+        <div className="hidden items-center justify-between lg:flex">
+          <p className="text-body-sm text-ink-muted">
+            {total} {total === 1 ? 'product' : 'products'}
+          </p>
+          <div className="flex items-center gap-2">
+            <span className="text-label-sm font-semibold uppercase tracking-wide text-ink-muted">Sort by</span>
+            <div className="w-52">
+              <Select
+                ariaLabel="Sort products"
+                value={sort}
+                options={q ? [RELEVANCE_OPTION, ...SORT_OPTIONS] : SORT_OPTIONS}
+                onChange={(v) => update((next) => next.set('sort', v))}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="lg:hidden">
+          <div className="grid grid-cols-2 gap-2">
             <Select
               ariaLabel="Sort products"
               value={sort}
               options={q ? [RELEVANCE_OPTION, ...SORT_OPTIONS] : SORT_OPTIONS}
               onChange={(v) => update((next) => next.set('sort', v))}
             />
+            <button
+              type="button"
+              onClick={() => setFiltersOpen(true)}
+              className="relative flex items-center justify-center gap-2 rounded border border-border bg-surface px-3 py-2 text-body-sm text-ink"
+            >
+              Filters
+              {activeFilters > 0 && (
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1 text-label-xs text-accent-fg">
+                  {activeFilters}
+                </span>
+              )}
+            </button>
           </div>
+          <p className="mt-3 text-center text-body-sm text-ink-muted">
+            {total} {total === 1 ? 'product' : 'products'}
+          </p>
         </div>
       </div>
 
-      <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[240px_1fr]">
-        {/* Filters */}
-        <aside className="space-y-6">
-          <div className="flex items-center justify-between">
+      <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-[230px_1fr]">
+        {/* Desktop filter rail */}
+        <aside className="hidden lg:block">
+          <div className="flex items-center justify-between px-0 pb-2">
             <h2 className="text-label-lg font-semibold uppercase tracking-wide text-primary">Filters</h2>
             {activeFilters > 0 && (
-              <button
-                onClick={() =>
-                  setSp(
-                    // Drop q too (search is a filter here), and don't carry over
-                    // 'relevance' — it's meaningless once the search is gone.
-                    new URLSearchParams(sort !== 'featured' && sort !== 'relevance' ? { sort } : {}),
-                    { replace: true },
-                  )
-                }
-                className="text-label-sm text-accent hover:underline"
-              >
+              <button onClick={clearAll} className="text-label-sm text-accent hover:underline">
                 Clear all
               </button>
             )}
           </div>
-
-          <FilterGroup title="Category">
-            {(categories.data ?? []).map((c) => (
-              <Check
-                key={c.id}
-                label={c.label}
-                checked={selectedCategories.includes(c.slug)}
-                onChange={() => toggleMulti('category', c.slug)}
-              />
-            ))}
-          </FilterGroup>
-
-          <FilterGroup title="Brand">
-            {(brands.data ?? []).length === 0 ? (
-              <p className="text-body-md text-ink-muted">No brands</p>
-            ) : (
-              (brands.data ?? []).map((b) => (
-                <Check
-                  key={b.id}
-                  label={b.name}
-                  checked={selectedBrands.includes(b.slug)}
-                  onChange={() => toggleMulti('brand', b.slug)}
-                />
-              ))
-            )}
-          </FilterGroup>
-
-          <FilterGroup title="Price (J$)">
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                inputMode="numeric"
-                value={minPrice}
-                placeholder="Min"
-                onChange={(e) => update((next) => (e.target.value ? next.set('minPrice', e.target.value) : next.delete('minPrice')))}
-                className="w-full rounded border border-border bg-surface px-2 py-1.5 text-body-md"
-              />
-              <span className="text-ink-muted">–</span>
-              <input
-                type="number"
-                inputMode="numeric"
-                value={maxPrice}
-                placeholder="Max"
-                onChange={(e) => update((next) => (e.target.value ? next.set('maxPrice', e.target.value) : next.delete('maxPrice')))}
-                className="w-full rounded border border-border bg-surface px-2 py-1.5 text-body-md"
-              />
-            </div>
-          </FilterGroup>
-
-          <Check
-            label="In stock only"
-            checked={inStock}
-            onChange={() => update((next) => (inStock ? next.delete('inStock') : next.set('inStock', 'true')))}
-          />
+          <ShopFilters {...filtersProps} />
         </aside>
+
+        {/* Mobile filter drawer */}
+        <Drawer
+          open={filtersOpen}
+          side="right"
+          title="Filters"
+          onClose={() => setFiltersOpen(false)}
+          footer={
+            <div className="flex gap-3">
+              <button
+                onClick={clearAll}
+                className="flex-1 rounded border-2 border-primary py-2.5 text-label-lg font-semibold text-primary"
+              >
+                Clear all
+              </button>
+              <button
+                onClick={() => setFiltersOpen(false)}
+                className="flex-1 rounded bg-primary py-2.5 text-label-lg font-semibold text-primary-fg"
+              >
+                Apply
+              </button>
+            </div>
+          }
+        >
+          <ShopFilters {...filtersProps} />
+        </Drawer>
 
         {/* Results */}
         <div>
           {products.loading ? (
-            <Loader />
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              {Array.from({ length: PAGE_SIZE }, (_, i) => (
+                <Skeleton key={i} className="aspect-[3/4]" />
+              ))}
+            </div>
           ) : products.error ? (
             <p className="text-error">{products.error}</p>
           ) : total === 0 ? (
@@ -203,36 +261,19 @@ export default function ShopPage() {
             </div>
           ) : (
             <>
-              <p className="mb-4 text-body-md text-ink-muted">
-                {total} {total === 1 ? 'product' : 'products'}
-              </p>
-              <div className="grid grid-cols-1 gap-gutter sm:grid-cols-2 xl:grid-cols-3">
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                 {(products.data?.items ?? []).map((p) => (
                   <ProductCard key={p.id} product={p} />
                 ))}
               </div>
 
               {totalPages > 1 && (
-                <div className="mt-10 flex items-center justify-center gap-3">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page <= 1}
-                    onClick={() => update((next) => next.set('page', String(page - 1)), false)}
-                  >
-                    Prev
-                  </Button>
-                  <span className="text-body-md text-ink-muted">
-                    Page {page} of {totalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page >= totalPages}
-                    onClick={() => update((next) => next.set('page', String(page + 1)), false)}
-                  >
-                    Next
-                  </Button>
+                <div className="mt-10">
+                  <Pagination
+                    page={page}
+                    pageCount={totalPages}
+                    onChange={(p) => update((next) => next.set('page', String(p)), false)}
+                  />
                 </div>
               )}
             </>
@@ -240,28 +281,5 @@ export default function ShopPage() {
         </div>
       </div>
     </Container>
-  );
-}
-
-function FilterGroup({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <h3 className="mb-2 text-label-sm font-semibold uppercase tracking-wide text-ink-muted">{title}</h3>
-      <div className="space-y-1.5">{children}</div>
-    </div>
-  );
-}
-
-function Check({ label, checked, onChange }: { label: string; checked: boolean; onChange: () => void }) {
-  return (
-    <label className="flex cursor-pointer items-center gap-2 text-body-md text-ink">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={onChange}
-        className="h-4 w-4 rounded border-border text-primary accent-[color:var(--color-primary)]"
-      />
-      {label}
-    </label>
   );
 }
