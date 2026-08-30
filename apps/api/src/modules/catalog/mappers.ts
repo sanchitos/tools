@@ -39,6 +39,7 @@ export function toCategoryDTO(row: CategoryRow, productCount?: number): Category
     slug: row.slug,
     label: row.label,
     imageUrl: row.image_url,
+    parentId: row.parent_id,
     ...(productCount !== undefined ? { productCount } : {}),
   };
 }

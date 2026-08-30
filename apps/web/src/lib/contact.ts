@@ -1,6 +1,5 @@
 /** Single source of truth for the storefront contact number. */
 export const PHONE_DISPLAY = '+1 (876) 430-0550';
-export const PHONE_TEL = '+18764300550';
 
 // WhatsApp click-to-chat: digits only, no '+' or spaces.
 const WHATSAPP_NUMBER = '18764300550';

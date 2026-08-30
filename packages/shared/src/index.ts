@@ -50,7 +50,13 @@ export interface CategoryDTO {
   slug: string;
   label: string;
   imageUrl: string | null;
-  /** Count of published products in this category (when requested). */
+  /** Top-level category when null; otherwise the parent's id (two-level hierarchy). */
+  parentId: string | null;
+  /**
+   * Count of published products in this category (when requested). For a
+   * top-level category this rolls up its subcategories' counts too, since
+   * filtering by a parent includes its children's products.
+   */
   productCount?: number;
 }
 

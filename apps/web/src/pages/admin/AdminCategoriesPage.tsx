@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { AdminCategoryDTO } from '@tools-jamaica/shared';
 import { api, ApiError } from '../../lib/api.js';
 import { useAsync } from '../../lib/useAsync.js';
-import { Badge, Button, ConfirmDialog, Loader } from '../../components/ui/index.js';
+import { Badge, Button, ConfirmDialog, Icon, Loader, Select } from '../../components/ui/index.js';
 
 type Editing = 'new' | AdminCategoryDTO | null;
 const input = 'w-full rounded border border-border bg-surface px-3 py-2 text-body-md text-ink focus:border-primary';
@@ -40,6 +40,7 @@ export default function AdminCategoriesPage() {
         <CategoryForm
           key={editing === 'new' ? 'new' : editing.id}
           category={editing === 'new' ? null : editing}
+          categories={data ?? []}
           onDone={() => { setEditing(null); reload(); }}
           onCancel={() => setEditing(null)}
         />
@@ -64,7 +65,16 @@ export default function AdminCategoriesPage() {
             <tbody>
               {(data ?? []).map((c, i) => (
                 <tr key={c.id} className={i % 2 ? 'bg-surface-muted' : 'bg-surface'}>
-                  <td className="px-4 py-3 font-medium text-ink">{c.label}</td>
+                  <td className="px-4 py-3 font-medium text-ink">
+                    {c.parentId ? (
+                      <span className="ml-5 inline-flex items-center gap-1.5 font-normal text-ink-muted">
+                        <Icon name="chevronRight" className="text-xs" />
+                        {c.label}
+                      </span>
+                    ) : (
+                      c.label
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-ink-muted">{c.slug}</td>
                   <td className="px-4 py-3 text-ink-muted">{c.sortOrder}</td>
                   <td className="px-4 py-3">{c.isPublished ? <Badge tone="success">Published</Badge> : <Badge tone="neutral">Hidden</Badge>}</td>
@@ -97,10 +107,12 @@ export default function AdminCategoriesPage() {
 
 function CategoryForm({
   category,
+  categories,
   onDone,
   onCancel,
 }: {
   category: AdminCategoryDTO | null;
+  categories: AdminCategoryDTO[];
   onDone: () => void;
   onCancel: () => void;
 }) {
@@ -109,8 +121,21 @@ function CategoryForm({
   const [imageUrl, setImageUrl] = useState(category?.imageUrl ?? '');
   const [sortOrder, setSortOrder] = useState(String(category?.sortOrder ?? 0));
   const [isPublished, setIsPublished] = useState(category?.isPublished ?? true);
+  const [parentId, setParentId] = useState(category?.parentId ?? '');
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // A category with existing subcategories can't itself become a child
+  // (server enforces this too — see admin/service.ts validateParentId).
+  const hasChildren = category ? categories.some((c) => c.parentId === category.id) : false;
+  const parentOptions = [
+    { value: '', label: '— None (top-level) —' },
+    ...(hasChildren
+      ? []
+      : categories
+          .filter((c) => c.parentId === null && c.id !== category?.id)
+          .map((c) => ({ value: c.id, label: c.label }))),
+  ];
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -122,6 +147,7 @@ function CategoryForm({
       imageUrl: imageUrl || null,
       sortOrder: Number(sortOrder),
       isPublished,
+      parentId: parentId || null,
     };
     try {
       if (category) await api.updateCategory(category.id, body);
@@ -146,6 +172,15 @@ function CategoryForm({
           <input className={input} value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} /></label>
         <label className="block"><span className="mb-1 block text-label-sm font-semibold uppercase tracking-wide text-ink-muted">Sort order</span>
           <input className={input} type="number" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} /></label>
+        <label className="block">
+          <span className="mb-1 block text-label-sm font-semibold uppercase tracking-wide text-ink-muted">Parent</span>
+          <Select value={parentId} options={parentOptions} onChange={setParentId} />
+          {hasChildren && (
+            <span className="mt-1 block text-label-sm text-ink-muted">
+              Has subcategories, so it can't become a subcategory itself.
+            </span>
+          )}
+        </label>
         <label className="flex items-center gap-2 pt-6 text-body-md text-ink">
           <input type="checkbox" checked={isPublished} onChange={(e) => setIsPublished(e.target.checked)} className="h-4 w-4" /> Published
         </label>

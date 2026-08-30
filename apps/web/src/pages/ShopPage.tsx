@@ -110,6 +110,8 @@ export default function ShopPage() {
       ? (categories.data ?? []).find((c) => c.slug === selectedCategories[0])?.label
       : undefined;
 
+  const topLevelCategories = (categories.data ?? []).filter((c) => c.parentId === null);
+
   const filtersProps = {
     categories: categories.data ?? [],
     brands: brands.data ?? [],
@@ -136,10 +138,10 @@ export default function ShopPage() {
       />
       <h1 className="mt-2 font-display text-headline-lg text-primary">Shop</h1>
 
-      {/* Subcategory chip rail */}
-      {(categories.data ?? []).length > 0 && (
+      {/* Department chip rail — top-level only; selecting one includes its subcategories (server-expanded). */}
+      {topLevelCategories.length > 0 && (
         <div className="mt-4 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {(categories.data ?? []).map((c) => {
+          {topLevelCategories.map((c) => {
             const selected = selectedCategories.includes(c.slug);
             return (
               <button

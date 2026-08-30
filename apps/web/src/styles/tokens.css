@@ -6,17 +6,19 @@
  * the CSS variables directly — never hard-coded hex/px. A Stitch palette change
  * is a one-file edit here.
  *
- * Aesthetic: professional/industrial. Drill Navy anchor + Safety Orange accent,
- * slate neutrals, 1px borders over shadows, hard "workbench" shadows for popovers,
- * Montserrat headings + Inter body. Light mode only (Stitch colorMode: LIGHT).
+ * Aesthetic: professional/industrial. Brand Blue anchor + Brand Red accent +
+ * Brand Yellow highlight, slate neutrals, 1px borders over shadows, hard
+ * "workbench" shadows for popovers, Montserrat headings + Inter body.
+ * Light mode only (Stitch colorMode: LIGHT).
  * ============================================================================
  */
 
 :root {
   /* --- Brand palette (raw) ------------------------------------------------ */
-  --drill-navy: #014b7a;
-  --drill-navy-deep: #003457;
-  --safety-orange: #f28c00;
+  --brand-blue: #282d53;
+  --brand-blue-deep: #1b1f3b;
+  --brand-red: #df2a2f;
+  --brand-yellow: #efe013;
   --iron-grey: #3a3a3a;
   --alert-red: #d62118;
 
@@ -25,22 +27,26 @@
   --color-surface: #ffffff; /* cards, primary content */
   --color-surface-muted: #eff4ff; /* subtle sections / inputs bg */
   --color-surface-strong: #e5eeff; /* raised / active tonal layer */
-  --color-inverse-surface: #213145; /* dark sections (footer, headers) */
+  --color-inverse-surface: #171a33; /* dark sections (footer, headers) */
 
   /* --- Text / foreground -------------------------------------------------- */
   --color-ink: #0b1c30; /* primary text (on-surface) */
   --color-ink-muted: #41474f; /* secondary text (on-surface-variant) */
   --color-inverse-ink: #eaf1ff; /* text on dark surfaces */
 
-  /* --- Primary (Drill Navy) ----------------------------------------------- */
-  --color-primary: #014b7a;
-  --color-primary-dark: #003457;
+  /* --- Primary (Brand Blue) ------------------------------------------------ */
+  --color-primary: #282d53;
+  --color-primary-dark: #1b1f3b;
   --color-primary-fg: #ffffff; /* text/icon on primary */
 
-  /* --- Accent (Safety Orange — CTAs, price tags, status) ------------------ */
-  --color-accent: #f28c00;
-  --color-accent-hover: #d97e00;
+  /* --- Accent (Brand Red — CTAs, price tags, status) ----------------------- */
+  --color-accent: #df2a2f;
+  --color-accent-hover: #c31f24;
   --color-accent-fg: #ffffff;
+
+  /* --- Highlight (Brand Yellow — sparing pop: sale/discount tags) --------- */
+  --color-highlight: #efe013;
+  --color-highlight-fg: #1b1f3b; /* dark text on yellow for contrast */
 
   /* --- Neutral strong (Iron Grey — table headers, dense data) ------------- */
   --color-neutral-strong: #3a3a3a;
@@ -49,7 +55,7 @@
   /* --- Borders / outlines ------------------------------------------------- */
   --color-border: #e2e8f0; /* 1px card/input borders (light slate) */
   --color-border-strong: #727780; /* dividers, stronger outlines */
-  --color-ring: #014b7a; /* focus ring (navy) */
+  --color-ring: #282d53; /* focus ring (brand blue) */
 
   /* --- Feedback ----------------------------------------------------------- */
   --color-error: #d62118;

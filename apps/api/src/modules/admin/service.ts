@@ -10,6 +10,7 @@ import type {
 import { db } from '../../lib/supabase.js';
 import { AppError } from '../../lib/errors.js';
 import { slugify } from '../../lib/slug.js';
+import type { CategoryRow } from '../../types/db.js';
 import {
   listAllObjectPaths,
   pathFromPublicUrl,
@@ -393,10 +394,70 @@ export async function listAdminCategories(): Promise<AdminCategoryDTO[]> {
     .select('*')
     .order('sort_order', { ascending: true });
   if (error) fail('Failed to list categories', error);
-  return (data ?? []).map((r) => toAdminCategoryDTO(r as never));
+
+  const rows = (data ?? []) as CategoryRow[];
+
+  // Group for display: each top-level category immediately followed by its
+  // subcategories (both already in sort_order sequence from the query above).
+  const byParent = new Map<string, CategoryRow[]>();
+  for (const r of rows) {
+    if (r.parent_id) {
+      const siblings = byParent.get(r.parent_id) ?? [];
+      siblings.push(r);
+      byParent.set(r.parent_id, siblings);
+    }
+  }
+  const grouped: CategoryRow[] = [];
+  for (const r of rows) {
+    if (!r.parent_id) {
+      grouped.push(r, ...(byParent.get(r.id) ?? []));
+    }
+  }
+  // Defensive: include any child whose parent wasn't returned above (should
+  // not happen since we don't filter by is_published here).
+  const seen = new Set(grouped.map((r) => r.id));
+  for (const r of rows) if (!seen.has(r.id)) grouped.push(r);
+
+  return grouped.map((r) => toAdminCategoryDTO(r));
+}
+
+/**
+ * Enforce exactly two levels of category depth. `selfId` is omitted on
+ * create (a brand-new category can never already have children).
+ */
+async function validateParentId(parentId: string | null | undefined, selfId?: string): Promise<void> {
+  if (parentId === null || parentId === undefined) return; // top-level: always OK
+
+  if (selfId && parentId === selfId) {
+    throw AppError.BadRequest('A category cannot be its own parent');
+  }
+
+  const { data: parent, error } = await db
+    .from('categories')
+    .select('id, parent_id')
+    .eq('id', parentId)
+    .maybeSingle();
+  if (error) fail('Failed to load parent category', error);
+  if (!parent) throw AppError.BadRequest('Parent category does not exist');
+  if ((parent as { parent_id: string | null }).parent_id !== null) {
+    throw AppError.BadRequest('Parent category cannot itself have a parent (max 2 levels deep)');
+  }
+
+  if (selfId) {
+    const { data: children, error: childErr } = await db
+      .from('categories')
+      .select('id')
+      .eq('parent_id', selfId)
+      .limit(1);
+    if (childErr) fail('Failed to check category children', childErr);
+    if (children && children.length > 0) {
+      throw AppError.BadRequest('Category already has subcategories; it cannot become a child itself');
+    }
+  }
 }
 
 export async function createCategory(input: CategoryCreate): Promise<AdminCategoryDTO> {
+  await validateParentId(input.parentId ?? null);
   const slug = await ensureUniqueSlug('categories', slugify(input.slug ?? input.label));
   const { data, error } = await db
     .from('categories')
@@ -406,6 +467,7 @@ export async function createCategory(input: CategoryCreate): Promise<AdminCatego
       image_url: input.imageUrl ?? null,
       sort_order: input.sortOrder ?? 0,
       is_published: input.isPublished,
+      parent_id: input.parentId ?? null,
     })
     .select('*')
     .single();
@@ -417,12 +479,15 @@ export async function updateCategory(
   id: string,
   input: CategoryUpdate,
 ): Promise<AdminCategoryDTO> {
+  if (input.parentId !== undefined) await validateParentId(input.parentId, id);
+
   const patch: Record<string, unknown> = {};
   if (input.label !== undefined) patch.label = input.label;
   if (input.slug !== undefined) patch.slug = await ensureUniqueSlug('categories', slugify(input.slug), id);
   if (input.imageUrl !== undefined) patch.image_url = input.imageUrl;
   if (input.sortOrder !== undefined) patch.sort_order = input.sortOrder;
   if (input.isPublished !== undefined) patch.is_published = input.isPublished;
+  if (input.parentId !== undefined) patch.parent_id = input.parentId;
 
   const { data, error } = await db
     .from('categories')
@@ -442,7 +507,9 @@ export async function deleteCategory(id: string): Promise<void> {
   const { error } = await db.from('categories').delete().eq('id', id);
   if (error) {
     if (isFkViolation(error)) {
-      throw AppError.Conflict('Category still has products; reassign or delete them first');
+      throw AppError.Conflict(
+        'Category still has products or subcategories; reassign or delete them first',
+      );
     }
     fail('Failed to delete category', error);
   }

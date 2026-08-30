@@ -33,6 +33,7 @@ export interface CategoryRow {
   slug: string;
   label: string;
   image_url: string | null;
+  parent_id: string | null;
   sort_order: number;
   is_published: boolean;
   created_at: string;

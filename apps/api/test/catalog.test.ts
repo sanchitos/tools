@@ -4,7 +4,7 @@ import request from 'supertest';
 vi.mock('../src/lib/supabase.js', () => import('./helpers/mockSupabase.js'));
 
 import { createApp } from '../src/app.js';
-import { queueResult, queueRpc, resetMocks } from './helpers/mockSupabase.js';
+import { db, queueResult, queueRpc, resetMocks } from './helpers/mockSupabase.js';
 
 const app = createApp();
 
@@ -43,14 +43,73 @@ describe('catalog API', () => {
 
   it('GET /categories maps rows and attaches product counts', async () => {
     queueResult('categories', {
-      data: [{ id: 'c1', slug: 'doors', label: 'Doors', image_url: null, sort_order: 10, is_published: true, created_at: '', updated_at: '' }],
+      data: [{ id: 'c1', slug: 'doors', label: 'Doors', image_url: null, parent_id: null, sort_order: 10, is_published: true, created_at: '', updated_at: '' }],
       error: null,
     });
     queueResult('products', { data: [{ category_id: 'c1' }, { category_id: 'c1' }], error: null });
     const res = await request(app).get('/api/v1/categories');
     expect(res.status).toBe(200);
-    expect(res.body[0]).toMatchObject({ slug: 'doors', label: 'Doors', productCount: 2 });
+    expect(res.body[0]).toMatchObject({ slug: 'doors', label: 'Doors', parentId: null, productCount: 2 });
     expect(res.body[0]).not.toHaveProperty('isPublished');
+  });
+
+  it('GET /categories rolls up a parent\'s productCount to include its subcategories', async () => {
+    queueResult('categories', {
+      data: [
+        { id: 'c-tiles', slug: 'tiles', label: 'Tiles', image_url: null, parent_id: null, sort_order: 10, is_published: true, created_at: '', updated_at: '' },
+        { id: 'c-ceramic', slug: 'ceramic', label: 'Ceramic', image_url: null, parent_id: 'c-tiles', sort_order: 1, is_published: true, created_at: '', updated_at: '' },
+      ],
+      error: null,
+    });
+    queueResult('products', {
+      data: [{ category_id: 'c-tiles' }, { category_id: 'c-ceramic' }, { category_id: 'c-ceramic' }],
+      error: null,
+    });
+    const res = await request(app).get('/api/v1/categories');
+    expect(res.status).toBe(200);
+    const tiles = res.body.find((c: { slug: string }) => c.slug === 'tiles');
+    const ceramic = res.body.find((c: { slug: string }) => c.slug === 'ceramic');
+    expect(tiles).toMatchObject({ parentId: null, productCount: 3 }); // own 1 + child's 2
+    expect(ceramic).toMatchObject({ parentId: 'c-tiles', productCount: 2 });
+  });
+
+  it('GET /products?category=<parent> expands to include child-category products (plain path)', async () => {
+    // expandCategorySlugs: resolve requested slug "tiles" -> parent row.
+    queueResult('categories', { data: [{ id: 'c-tiles', slug: 'tiles', parent_id: null }], error: null });
+    // expandCategorySlugs: children of c-tiles.
+    queueResult('categories', { data: [{ slug: 'ceramic' }, { slug: 'porcelain' }], error: null });
+    // idsForSlugs: resolve the expanded slug set (tiles, ceramic, porcelain) to ids.
+    queueResult('categories', {
+      data: [{ id: 'c-tiles' }, { id: 'c-ceramic' }, { id: 'c-porcelain' }],
+      error: null,
+    });
+    queueResult('products', {
+      data: [productRow({ category: { id: 'c-ceramic', slug: 'ceramic', label: 'Ceramic' } })],
+      error: null,
+      count: 1,
+    });
+
+    const res = await request(app).get('/api/v1/products?category=tiles');
+    expect(res.status).toBe(200);
+    expect(res.body.items[0].category.slug).toBe('ceramic');
+  });
+
+  it('GET /products?q=&category=<parent> expands categories before calling search_products RPC', async () => {
+    queueResult('categories', { data: [{ id: 'c-tiles', slug: 'tiles', parent_id: null }], error: null });
+    queueResult('categories', { data: [{ slug: 'ceramic' }, { slug: 'porcelain' }], error: null });
+    queueRpc('search_products', {
+      data: [{ product_id: 'p1', score: 1, total_count: 1 }],
+      error: null,
+    });
+    queueResult('products', { data: [productRow()], error: null });
+
+    const res = await request(app).get('/api/v1/products?q=door&category=tiles');
+    expect(res.status).toBe(200);
+
+    const rpcCalls = db.rpc.mock.calls.filter(([name]) => name === 'search_products');
+    const [, rpcArgs] = rpcCalls[rpcCalls.length - 1] as [string, { p_category_slugs: string[] }];
+    expect(rpcArgs.p_category_slugs).toEqual(expect.arrayContaining(['tiles', 'ceramic', 'porcelain']));
+    expect(rpcArgs.p_category_slugs).toHaveLength(3);
   });
 
   it('GET /products/:slug returns 404 when missing', async () => {

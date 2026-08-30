@@ -9,14 +9,14 @@ const TICKER = [
   'Islandwide delivery',
   'Trade pricing available — ask us',
   'Genuine brands only',
-  'Call or WhatsApp for same-day quotes',
+  'WhatsApp us for same-day quotes',
 ];
 
 const SERVICES = [
   { icon: 'truck' as const, title: 'Islandwide delivery', body: 'We deliver to every parish, fast.' },
   { icon: 'shield' as const, title: 'Genuine brands', body: 'Quality hardware you can build on.' },
   { icon: 'tag' as const, title: 'Trade pricing', body: 'Ask about pricing for contractors.' },
-  { icon: 'headset' as const, title: 'Real support', body: 'Call or WhatsApp — a person answers.' },
+  { icon: 'headset' as const, title: 'Real support', body: 'WhatsApp us — a person answers.' },
 ];
 
 export default function HomePage() {
@@ -24,7 +24,9 @@ export default function HomePage() {
   const featured = useAsync(() => api.featured(), []);
   const newArrivals = useAsync(() => api.listProducts({ sort: 'name', pageSize: 12 }), []);
 
-  const categoryList = categories.data ?? [];
+  // Home shows top-level departments only; a subcategory's products still
+  // surface when its parent department is selected (server-side expansion).
+  const categoryList = (categories.data ?? []).filter((c) => c.parentId === null);
   const [promoA, promoB] = categoryList;
 
   return (

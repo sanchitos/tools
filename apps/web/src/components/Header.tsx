@@ -4,7 +4,7 @@ import { Container } from './ui/Container.js';
 import { Icon } from './ui/Icon.js';
 import { IconButton } from './ui/IconButton.js';
 import { DepartmentDrawer } from './DepartmentDrawer.js';
-import { PHONE_DISPLAY, PHONE_TEL, WHATSAPP_URL } from '../lib/contact.js';
+import { PHONE_DISPLAY, WHATSAPP_URL } from '../lib/contact.js';
 import { useCart } from '../context/CartContext.js';
 
 /** Public site header: three sticky tiers (utility / brand+search / promo). */
@@ -50,9 +50,14 @@ export function Header() {
       {/* Tier 1 — utility bar */}
       <div className="hidden bg-primary-dark text-primary-fg sm:block">
         <Container className="flex h-9 items-center justify-between text-label-sm">
-          <a href={`tel:${PHONE_TEL}`} className="flex items-center gap-1.5 hover:text-accent">
-            <Icon name="headset" />
-            Call us: {PHONE_DISPLAY}
+          <a
+            href={WHATSAPP_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 hover:text-accent"
+          >
+            <Icon name="whatsapp" />
+            {PHONE_DISPLAY}
           </a>
           <a
             href={WHATSAPP_URL}
@@ -83,13 +88,6 @@ export function Header() {
           <div className="mx-4 hidden max-w-[580px] flex-1 md:flex">{searchInput}</div>
 
           <nav className="ml-auto flex items-center gap-4 lg:gap-6">
-            <a
-              href={`tel:${PHONE_TEL}`}
-              className="hidden items-center gap-1.5 text-label-sm font-semibold hover:text-accent lg:flex"
-            >
-              <Icon name="phone" className="text-lg" />
-              Call us
-            </a>
             <a
               href={WHATSAPP_URL}
               target="_blank"

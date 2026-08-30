@@ -105,7 +105,12 @@ export default function ProductEditorPage() {
 
   if (!isNew && product.loading) return <Loader />;
 
-  const categoryOptions = (cats.data ?? []).map((c) => ({ value: c.id, label: c.label }));
+  // adminCategories() already returns parents immediately followed by their
+  // subcategories (see listAdminCategories), so this just needs to indent.
+  const categoryOptions = (cats.data ?? []).map((c) => ({
+    value: c.id,
+    label: c.parentId ? `— ${c.label}` : c.label,
+  }));
   const brandOptions = [{ value: '', label: '— No brand —' }, ...(brands.data ?? []).map((b) => ({ value: b.id, label: b.name }))];
 
   return (

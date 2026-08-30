@@ -27,6 +27,11 @@ function sessionCookie(): string {
   return `${at}; ${rt}`;
 }
 
+/** Session cookie plus the readable double-submit CSRF cookie, for mutating requests. */
+function sessionCookieWithCsrf(): string {
+  return `${sessionCookie()}; sw_csrf=test-csrf-token`;
+}
+
 const profile = (role: 'admin' | 'customer') => ({
   data: { id: 'uid', email: 'u@toolsja.test', full_name: 'U', role, is_active: true, created_at: '', updated_at: '' },
   error: null,
@@ -72,5 +77,59 @@ describe('admin API', () => {
       .delete('/api/v1/admin/products/00000000-0000-0000-0000-000000000000')
       .set('Cookie', sessionCookie());
     expect(res.status).toBe(403);
+  });
+
+  describe('category hierarchy — depth enforcement (400 BadRequest)', () => {
+    const PARENT_ID = '11111111-1111-1111-1111-111111111111';
+    const SELF_ID = '22222222-2222-2222-2222-222222222222';
+
+    const post = (body: Record<string, unknown>) =>
+      request(app)
+        .post('/api/v1/admin/categories')
+        .set('Cookie', sessionCookieWithCsrf())
+        .set('x-csrf-token', 'test-csrf-token')
+        .send(body);
+
+    const patch = (id: string, body: Record<string, unknown>) =>
+      request(app)
+        .patch(`/api/v1/admin/categories/${id}`)
+        .set('Cookie', sessionCookieWithCsrf())
+        .set('x-csrf-token', 'test-csrf-token')
+        .send(body);
+
+    it('rejects a parentId that does not resolve to an existing category', async () => {
+      queueResult('profiles', profile('admin'));
+      queueResult('categories', { data: null, error: null }); // parent lookup -> not found
+      const res = await post({ label: 'Ceramic', parentId: PARENT_ID });
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('BAD_REQUEST');
+    });
+
+    it('rejects a parentId whose target already has a parent (depth > 2)', async () => {
+      queueResult('profiles', profile('admin'));
+      queueResult('categories', {
+        data: { id: PARENT_ID, parent_id: 'some-grandparent' }, // chosen "parent" is itself a child
+        error: null,
+      });
+      const res = await post({ label: 'Ceramic', parentId: PARENT_ID });
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('BAD_REQUEST');
+    });
+
+    it('rejects a self-parent on update', async () => {
+      queueResult('profiles', profile('admin'));
+      const res = await patch(SELF_ID, { parentId: SELF_ID });
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('BAD_REQUEST');
+    });
+
+    it('rejects assigning a parent to a category that already has children', async () => {
+      queueResult('profiles', profile('admin'));
+      queueResult('categories', { data: { id: PARENT_ID, parent_id: null }, error: null }); // valid top-level parent
+      queueResult('categories', { data: [{ id: 'existing-child' }], error: null }); // SELF_ID already has children
+      const res = await patch(SELF_ID, { parentId: PARENT_ID });
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('BAD_REQUEST');
+    });
   });
 });

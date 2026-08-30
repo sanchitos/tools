@@ -28,6 +28,7 @@ export function toAdminCategoryDTO(row: CategoryRow): AdminCategoryDTO {
     slug: row.slug,
     label: row.label,
     imageUrl: row.image_url,
+    parentId: row.parent_id,
     sortOrder: row.sort_order,
     isPublished: row.is_published,
   };

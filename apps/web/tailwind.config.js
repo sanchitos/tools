@@ -39,6 +39,10 @@ export default {
           hover: 'var(--color-accent-hover)',
           fg: 'var(--color-accent-fg)',
         },
+        highlight: {
+          DEFAULT: 'var(--color-highlight)',
+          fg: 'var(--color-highlight-fg)',
+        },
         neutralStrong: {
           DEFAULT: 'var(--color-neutral-strong)',
           fg: 'var(--color-neutral-strong-fg)',

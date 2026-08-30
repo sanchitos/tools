@@ -100,6 +100,8 @@ export const categoryCreateSchema = z.object({
   imageUrl: z.string().url().max(2000).nullable().optional(),
   sortOrder: z.number().int().nonnegative().optional(),
   isPublished: z.boolean().default(true),
+  /** Top-level when omitted/null. A parent cannot itself have a parent (2 levels max). */
+  parentId: uuid.nullable().optional(),
 });
 
 export const categoryUpdateSchema = categoryCreateSchema.partial();

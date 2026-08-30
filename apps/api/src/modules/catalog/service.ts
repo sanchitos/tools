@@ -40,6 +40,34 @@ async function idsForSlugs(table: 'categories' | 'brands', slugs: string[]): Pro
   return (data ?? []).map((r) => (r as { id: string }).id);
 }
 
+/**
+ * Expand requested category slugs to include every child (subcategory) slug,
+ * so filtering by a parent also matches its subcategories' products. Slugs
+ * that are already a child (or don't match anything) pass through unchanged
+ * — a child has no children of its own (depth is capped at 2 in the admin
+ * service). Deliberately keeps `search_products` (0005_search.sql) untouched:
+ * this expansion happens here, before either query path consumes the slugs.
+ */
+async function expandCategorySlugs(slugs: string[]): Promise<string[]> {
+  if (!slugs.length) return slugs;
+
+  const { data, error } = await db.from('categories').select('id, parent_id').in('slug', slugs);
+  if (error) fail('Failed to resolve categories', error.message);
+  const matched = (data ?? []) as Pick<CategoryRow, 'id' | 'parent_id'>[];
+
+  const parentIds = matched.filter((c) => c.parent_id === null).map((c) => c.id);
+  if (!parentIds.length) return slugs;
+
+  const { data: children, error: childErr } = await db
+    .from('categories')
+    .select('slug')
+    .in('parent_id', parentIds);
+  if (childErr) fail('Failed to resolve child categories', childErr.message);
+  const childSlugs = (children ?? []).map((r) => (r as { slug: string }).slug);
+
+  return Array.from(new Set([...slugs, ...childSlugs]));
+}
+
 /** Non-search product listing: filters + a plain PostgREST sort, no ranking. */
 async function listProductsPlain(
   params: ProductListParams,
@@ -51,7 +79,8 @@ async function listProductsPlain(
     .eq('is_published', true);
 
   if (params.category?.length) {
-    const ids = await idsForSlugs('categories', params.category);
+    const expanded = await expandCategorySlugs(params.category);
+    const ids = await idsForSlugs('categories', expanded);
     query = query.in('category_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
   }
   if (params.brand?.length) {
@@ -108,9 +137,13 @@ async function searchProducts(
   q: string,
   sort: NonNullable<ProductListParams['sort']>,
 ): Promise<Paginated<ProductSummaryDTO>> {
+  const expandedCategories = params.category?.length
+    ? await expandCategorySlugs(params.category)
+    : undefined;
+
   const { data, error } = await db.rpc('search_products', {
     p_q: q,
-    p_category_slugs: params.category?.length ? params.category : null, // [] means "match nothing" in SQL, not "no filter"
+    p_category_slugs: expandedCategories?.length ? expandedCategories : null, // [] means "match nothing" in SQL, not "no filter"
     p_brand_slugs: params.brand?.length ? params.brand : null,
     p_min_price: params.minPrice ?? null,
     p_max_price: params.maxPrice ?? null,
@@ -219,6 +252,8 @@ export async function listCategories(): Promise<CategoryDTO[]> {
     .order('sort_order', { ascending: true });
   if (error) fail('Failed to list categories', error.message);
 
+  const rows = data as CategoryRow[];
+
   // Product counts (published only), tallied in one pass.
   const { data: counts, error: countErr } = await db
     .from('products')
@@ -232,7 +267,17 @@ export async function listCategories(): Promise<CategoryDTO[]> {
     if (id) tally.set(id, (tally.get(id) ?? 0) + 1);
   }
 
-  return (data as CategoryRow[]).map((c) => toCategoryDTO(c, tally.get(c.id) ?? 0));
+  // Roll up: a parent's count is its own products plus every child's, since
+  // filtering the storefront by a parent also matches its children's products.
+  const rolledUp = new Map<string, number>();
+  for (const c of rows) rolledUp.set(c.id, tally.get(c.id) ?? 0);
+  for (const c of rows) {
+    if (c.parent_id) {
+      rolledUp.set(c.parent_id, (rolledUp.get(c.parent_id) ?? 0) + (tally.get(c.id) ?? 0));
+    }
+  }
+
+  return rows.map((c) => toCategoryDTO(c, rolledUp.get(c.id) ?? 0));
 }
 
 export async function listBrands(): Promise<BrandDTO[]> {

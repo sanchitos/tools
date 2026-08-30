@@ -32,6 +32,8 @@ export function resetMocks(): void {
   for (const k of Object.keys(queues)) delete queues[k];
   signInResult = null;
   refreshResult = null;
+  db.from.mockClear();
+  db.rpc.mockClear();
 }
 
 function take(table: string): QueryResult {

@@ -34,15 +34,33 @@ export function ShopFilters({
   return (
     <div className="px-4 lg:px-0">
       <Accordion title="Category" defaultOpen>
-        <div className="space-y-1.5">
-          {categories.map((c) => (
-            <Check
-              key={c.id}
-              label={c.label}
-              checked={selectedCategories.includes(c.slug)}
-              onChange={() => onToggleCategory(c.slug)}
-            />
-          ))}
+        <div className="space-y-3">
+          {categories
+            .filter((c) => c.parentId === null)
+            .map((parent) => {
+              const children = categories.filter((c) => c.parentId === parent.id);
+              return (
+                <div key={parent.id}>
+                  <Check
+                    label={parent.label}
+                    checked={selectedCategories.includes(parent.slug)}
+                    onChange={() => onToggleCategory(parent.slug)}
+                  />
+                  {children.length > 0 && (
+                    <div className="ml-6 mt-1.5 space-y-1.5">
+                      {children.map((child) => (
+                        <Check
+                          key={child.id}
+                          label={child.label}
+                          checked={selectedCategories.includes(child.slug)}
+                          onChange={() => onToggleCategory(child.slug)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
         </div>
       </Accordion>
 

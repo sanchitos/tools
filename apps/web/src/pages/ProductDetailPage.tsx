@@ -14,7 +14,7 @@ import {
 } from '../components/ui/index.js';
 import { ProductCard } from '../components/ProductCard.js';
 import { formatPrice } from '../lib/format.js';
-import { PHONE_DISPLAY, PHONE_TEL, whatsappUrl } from '../lib/contact.js';
+import { whatsappUrl } from '../lib/contact.js';
 import { useCart } from '../context/CartContext.js';
 
 const TRUST_STRIP = [
@@ -218,13 +218,6 @@ export default function ProductDetailPage() {
               >
                 <Icon name="whatsapp" />
                 Enquire on WhatsApp
-              </a>
-              <a
-                href={`tel:${PHONE_TEL}`}
-                className="flex w-full items-center justify-center gap-2 text-label-sm font-semibold text-ink-muted hover:text-primary"
-              >
-                <Icon name="phone" />
-                Call {PHONE_DISPLAY}
               </a>
             </div>
           </div>

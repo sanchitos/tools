@@ -3,7 +3,7 @@ import { Container } from './ui/Container.js';
 import { Icon } from './ui/Icon.js';
 import { useAsync } from '../lib/useAsync.js';
 import { api } from '../lib/api.js';
-import { PHONE_DISPLAY, PHONE_TEL, WHATSAPP_URL } from '../lib/contact.js';
+import { PHONE_DISPLAY, WHATSAPP_URL } from '../lib/contact.js';
 
 /** Footer: contact band, six-column link grid, orange top rule + copyright bar. */
 export function Footer() {
@@ -32,10 +32,12 @@ export function Footer() {
                 WhatsApp us
               </a>
               <a
-                href={`tel:${PHONE_TEL}`}
+                href={WHATSAPP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="flex items-center gap-2 rounded border-2 border-primary px-4 py-2 text-label-sm font-semibold text-primary hover:bg-surface-strong"
               >
-                <Icon name="phone" />
+                <Icon name="whatsapp" />
                 {PHONE_DISPLAY}
               </a>
             </div>
@@ -83,7 +85,6 @@ export function Footer() {
           <div>
             <h3 className="text-label-lg font-semibold uppercase tracking-wide text-accent">Help</h3>
             <ul className="mt-4 space-y-2 text-body-md text-primary-fg/80">
-              <li><a href={`tel:${PHONE_TEL}`} className="hover:text-accent">Call us</a></li>
               <li>
                 <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="hover:text-accent">
                   WhatsApp us
