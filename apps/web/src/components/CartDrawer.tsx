@@ -5,9 +5,11 @@ import { Drawer } from './ui/Drawer.js';
 import { ImageWithFallback } from './ui/ImageWithFallback.js';
 import { Icon } from './ui/Icon.js';
 import { formatPrice } from '../lib/format.js';
+import { useT } from '../i18n/LocaleContext.js';
 
 /** Cart drawer — rendered once in PublicLayout, driven by CartContext. */
 export function CartDrawer() {
+  const t = useT();
   const { lines, subtotal, setQty, remove, isOpen, close } = useCart();
   const location = useLocation();
   const navigate = useNavigate();
@@ -27,28 +29,29 @@ export function CartDrawer() {
     <Drawer
       open={isOpen}
       side="right"
-      title="Your cart"
+      title={t('cart.title')}
+      closeLabel={t('common.close')}
       onClose={close}
       footer={
         lines.length > 0 ? (
           <div>
             <div className="flex items-center justify-between text-body-md font-semibold text-ink">
-              <span>Subtotal</span>
+              <span>{t('common.subtotal')}</span>
               <span>{formatPrice(subtotal)}</span>
             </div>
-            <p className="mt-1 text-label-sm text-ink-muted">Delivery quoted separately.</p>
+            <p className="mt-1 text-label-sm text-ink-muted">{t('common.deliveryQuoted')}</p>
             <button
               onClick={goCheckout}
               className="mt-3 flex w-full items-center justify-center rounded bg-primary py-3 text-label-lg font-semibold text-primary-fg hover:bg-primary-dark"
             >
-              Checkout
+              {t('cart.checkout')}
             </button>
             <Link
               to="/cart"
               onClick={close}
               className="mt-2 flex w-full items-center justify-center rounded border-2 border-primary py-2.5 text-label-lg font-semibold text-primary hover:bg-surface-muted"
             >
-              View cart
+              {t('cart.viewCart')}
             </Link>
           </div>
         ) : undefined
@@ -57,13 +60,13 @@ export function CartDrawer() {
       {lines.length === 0 ? (
         <div className="flex flex-col items-center gap-3 px-4 py-16 text-center">
           <Icon name="cart" className="text-5xl text-ink-muted" />
-          <p className="text-body-md text-ink-muted">Your cart is empty</p>
+          <p className="text-body-md text-ink-muted">{t('cart.empty')}</p>
           <Link
             to="/shop"
             onClick={close}
             className="mt-2 rounded bg-primary px-6 py-2.5 text-label-lg font-semibold text-primary-fg hover:bg-primary-dark"
           >
-            Shop products
+            {t('common.shopProducts')}
           </Link>
         </div>
       ) : (
@@ -84,7 +87,7 @@ export function CartDrawer() {
                   </Link>
                   <button
                     onClick={() => remove(line.productId)}
-                    aria-label={`Remove ${line.name}`}
+                    aria-label={t('common.removeItem', { name: line.name })}
                     className="shrink-0 text-ink-muted hover:text-error"
                   >
                     <Icon name="close" />
@@ -96,7 +99,7 @@ export function CartDrawer() {
                     <button
                       onClick={() => setQty(line.productId, line.quantity - 1)}
                       disabled={line.quantity <= 1}
-                      aria-label="Decrease quantity"
+                      aria-label={t('common.decreaseQuantity')}
                       className="px-2 py-1 text-ink disabled:opacity-40"
                     >
                       −
@@ -104,7 +107,7 @@ export function CartDrawer() {
                     <span className="min-w-4 text-center text-body-sm">{line.quantity}</span>
                     <button
                       onClick={() => setQty(line.productId, line.quantity + 1)}
-                      aria-label="Increase quantity"
+                      aria-label={t('common.increaseQuantity')}
                       className="px-2 py-1 text-ink"
                     >
                       +

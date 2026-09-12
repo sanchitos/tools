@@ -16,14 +16,16 @@ import { ProductCard } from '../components/ProductCard.js';
 import { formatPrice } from '../lib/format.js';
 import { whatsappUrl } from '../lib/contact.js';
 import { useCart } from '../context/CartContext.js';
+import { useT } from '../i18n/LocaleContext.js';
 
 const TRUST_STRIP = [
-  { icon: 'truck' as const, label: 'Islandwide delivery' },
-  { icon: 'shield' as const, label: 'Genuine brands only' },
-  { icon: 'headset' as const, label: 'Expert advice by phone' },
+  { icon: 'truck' as const, key: 'product.trust.delivery' as const },
+  { icon: 'shield' as const, key: 'product.trust.genuine' as const },
+  { icon: 'headset' as const, key: 'product.trust.advice' as const },
 ];
 
 export default function ProductDetailPage() {
+  const t = useT();
   const { slug = '' } = useParams();
   const { data: product, loading, error } = useAsync(() => api.product(slug), [slug]);
   const [activeImg, setActiveImg] = useState(0);
@@ -60,10 +62,10 @@ export default function ProductDetailPage() {
   if (error || !product) {
     return (
       <Container className="py-24 text-center">
-        <h1 className="font-display text-headline-lg text-primary">Product not found</h1>
-        <p className="mt-3 text-body-md text-ink-muted">{error ?? 'This product may have been removed.'}</p>
+        <h1 className="font-display text-headline-lg text-primary">{t('product.notFound')}</h1>
+        <p className="mt-3 text-body-md text-ink-muted">{error ?? t('product.notFoundBody')}</p>
         <Link to="/shop" className="mt-6 inline-block text-label-lg font-semibold text-accent hover:underline">
-          ← Back to shop
+          {t('product.backToShop')}
         </Link>
       </Container>
     );
@@ -73,7 +75,10 @@ export default function ProductDetailPage() {
   const active = images[activeImg] ?? product.primaryImage ?? null;
   const outOfStock = product.stock <= 0;
   const maxQty = Math.max(1, product.stock);
-  const enquiryMessage = `Hi, I'm interested in ${product.name} (${product.sku ?? product.slug}).`;
+  const enquiryMessage = t('product.enquiryMessage', {
+    name: product.name,
+    ref: product.sku ?? product.slug,
+  });
 
   const setQty = (n: number) => setQtyState(Math.min(maxQty, Math.max(1, n)));
   const addToCart = () => {
@@ -86,8 +91,8 @@ export default function ProductDetailPage() {
     <Container className="py-8">
       <Breadcrumbs
         items={[
-          { label: 'Home', to: '/' },
-          { label: 'Shop', to: '/shop' },
+          { label: t('common.home'), to: '/' },
+          { label: t('common.shop'), to: '/shop' },
           ...(product.category
             ? [{ label: product.category.label, to: `/shop?category=${product.category.slug}` }]
             : []),
@@ -105,7 +110,7 @@ export default function ProductDetailPage() {
                   key={img.id}
                   onClick={() => setActiveImg(i)}
                   className={`h-20 w-20 shrink-0 overflow-hidden rounded border-2 ${i === activeImg ? 'border-primary' : 'border-border'}`}
-                  aria-label={`View image ${i + 1}`}
+                  aria-label={t('product.viewImage', { n: i + 1 })}
                 >
                   <ImageWithFallback src={img.url} alt={img.altText ?? ''} className="h-full w-full" imgClassName="object-contain" />
                 </button>
@@ -122,14 +127,14 @@ export default function ProductDetailPage() {
             {images.length > 1 && (
               <>
                 <button
-                  aria-label="Previous image"
+                  aria-label={t('product.previousImage')}
                   onClick={() => setActiveImg((i) => (i - 1 + images.length) % images.length)}
                   className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full border border-border bg-surface/90 p-2 shadow-sm hover:bg-surface"
                 >
                   <Icon name="chevronLeft" className="text-xl text-ink" />
                 </button>
                 <button
-                  aria-label="Next image"
+                  aria-label={t('product.nextImage')}
                   onClick={() => setActiveImg((i) => (i + 1) % images.length)}
                   className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full border border-border bg-surface/90 p-2 shadow-sm hover:bg-surface"
                 >
@@ -142,19 +147,31 @@ export default function ProductDetailPage() {
 
         {/* Info */}
         <div>
-          {product.sku && <span className="text-label-xs text-ink-muted">SKU: {product.sku}</span>}
+          {product.sku && (
+            <span className="text-label-xs text-ink-muted">{t('common.sku', { sku: product.sku })}</span>
+          )}
           <h1 className="mt-1 font-display text-headline-sm font-bold text-ink">{product.name}</h1>
-          <p className="mt-1 text-body-sm text-ink-muted">Sold by {product.brand?.name ?? 'Tools Jamaica'}</p>
+          <p className="mt-1 text-body-sm text-ink-muted">
+            {t('common.soldBy', { brand: product.brand?.name ?? 'Tools Jamaica' })}
+          </p>
 
           {product.reviewCount > 0 && (
             <div className="mt-2">
-              <Stars rating={product.rating} count={product.reviewCount} />
+              <Stars
+                rating={product.rating}
+                count={product.reviewCount}
+                ariaLabel={t('common.starsAria', { rating: product.rating })}
+              />
             </div>
           )}
 
           <div className="mt-4 flex items-center gap-3">
             <span className="text-display-md font-bold text-accent">{formatPrice(product.price)}</span>
-            {outOfStock ? <Badge tone="error">Out of stock</Badge> : <Badge tone="success">In stock</Badge>}
+            {outOfStock ? (
+              <Badge tone="error">{t('common.outOfStock')}</Badge>
+            ) : (
+              <Badge tone="success">{t('common.inStock')}</Badge>
+            )}
           </div>
 
           {product.shortDescription && (
@@ -174,16 +191,16 @@ export default function ProductDetailPage() {
 
           {/* Buy box */}
           <div ref={buyBoxRef} className="mt-6 rounded-card border border-border p-4 shadow-card">
-            <h3 className="text-headline-sm text-ink">Get this product</h3>
+            <h3 className="text-headline-sm text-ink">{t('product.getThisProduct')}</h3>
 
             {!outOfStock && (
               <div className="mt-3 flex items-center gap-2">
-                <span className="text-label-sm font-semibold text-ink-muted">Quantity</span>
+                <span className="text-label-sm font-semibold text-ink-muted">{t('product.quantity')}</span>
                 <div className="flex h-10 items-center rounded border border-border">
                   <button
                     onClick={() => setQty(qty - 1)}
                     disabled={qty <= 1}
-                    aria-label="Decrease quantity"
+                    aria-label={t('common.decreaseQuantity')}
                     className="h-full px-3 text-ink disabled:opacity-40"
                   >
                     −
@@ -192,7 +209,7 @@ export default function ProductDetailPage() {
                   <button
                     onClick={() => setQty(qty + 1)}
                     disabled={qty >= maxQty}
-                    aria-label="Increase quantity"
+                    aria-label={t('common.increaseQuantity')}
                     className="h-full px-3 text-ink disabled:opacity-40"
                   >
                     +
@@ -208,7 +225,7 @@ export default function ProductDetailPage() {
                 className="flex w-full items-center justify-center gap-2 rounded bg-primary py-3 text-label-lg font-semibold text-primary-fg transition-colors hover:bg-primary-dark disabled:pointer-events-none disabled:opacity-50"
               >
                 <Icon name="cart" />
-                {outOfStock ? 'Out of stock' : 'Add to cart'}
+                {outOfStock ? t('common.outOfStock') : t('common.addToCart')}
               </button>
               <a
                 href={whatsappUrl(enquiryMessage)}
@@ -217,17 +234,17 @@ export default function ProductDetailPage() {
                 className="flex w-full items-center justify-center gap-2 rounded border-2 border-primary py-3 text-label-lg font-semibold text-primary hover:bg-surface-muted"
               >
                 <Icon name="whatsapp" />
-                Enquire on WhatsApp
+                {t('product.enquireWhatsapp')}
               </a>
             </div>
           </div>
 
           {/* Trust strip */}
           <div className="mt-6 space-y-2">
-            {TRUST_STRIP.map((t) => (
-              <div key={t.label} className="flex items-center gap-2 text-body-sm text-ink-muted">
-                <Icon name={t.icon} className="text-primary" />
-                {t.label}
+            {TRUST_STRIP.map((item) => (
+              <div key={item.key} className="flex items-center gap-2 text-body-sm text-ink-muted">
+                <Icon name={item.icon} className="text-primary" />
+                {t(item.key)}
               </div>
             ))}
           </div>
@@ -256,7 +273,7 @@ export default function ProductDetailPage() {
               className="flex shrink-0 items-center gap-2 rounded bg-primary px-4 py-2 text-label-sm font-semibold text-primary-fg hover:bg-primary-dark disabled:pointer-events-none disabled:opacity-50"
             >
               <Icon name="cart" />
-              {outOfStock ? 'Out of stock' : 'Add to cart'}
+              {outOfStock ? t('common.outOfStock') : t('common.addToCart')}
             </button>
           </Container>
         </div>
@@ -271,7 +288,7 @@ export default function ProductDetailPage() {
                 onClick={() => setTab('description')}
                 className={`pb-3 text-label-lg font-semibold ${tab === 'description' ? 'border-b-2 border-primary text-primary' : 'text-ink-muted'}`}
               >
-                Description
+                {t('product.description')}
               </button>
             )}
             {product.specs.length > 0 && (
@@ -279,7 +296,7 @@ export default function ProductDetailPage() {
                 onClick={() => setTab('specs')}
                 className={`pb-3 text-label-lg font-semibold ${tab === 'specs' ? 'border-b-2 border-primary text-primary' : 'text-ink-muted'}`}
               >
-                Specifications
+                {t('product.specifications')}
               </button>
             )}
           </div>
@@ -311,7 +328,11 @@ export default function ProductDetailPage() {
       {/* Related */}
       {product.related.length > 0 && (
         <div className="mt-16">
-          <Rail title="Recommended products">
+          <Rail
+            title={t('product.recommended')}
+            scrollLeftLabel={t('common.scrollLeft')}
+            scrollRightLabel={t('common.scrollRight')}
+          >
             {product.related.map((p) => (
               <div key={p.id} className="w-[220px] shrink-0 snap-start">
                 <ProductCard product={p} />

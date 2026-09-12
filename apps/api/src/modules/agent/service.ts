@@ -17,12 +17,15 @@ export async function searchProductsForAgent(params: AgentSearchParams): Promise
     maxPrice: params.maxPrice,
     page: 1,
     pageSize: params.limit,
+    // The agent answers in English for now; plumbing a locale through
+    // agentSearchQuerySchema is additive when the WhatsApp flow needs Spanish.
+    lang: 'en',
   });
 
   if (total === 0) {
     // Give the agent something true to offer instead of letting the model
     // invent a product to fill the silence (see promptgrok.md's zero-result rule).
-    const categories = await listCategories();
+    const categories = await listCategories('en');
     return {
       items: [],
       total: 0,

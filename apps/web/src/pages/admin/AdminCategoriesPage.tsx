@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { AdminCategoryDTO } from '@tools-jamaica/shared';
 import { api, ApiError } from '../../lib/api.js';
 import { useAsync } from '../../lib/useAsync.js';
+import { BilingualField, esOrNull } from '../../components/admin/BilingualField.js';
 import { Badge, Button, ConfirmDialog, Icon, Loader, Select } from '../../components/ui/index.js';
 
 type Editing = 'new' | AdminCategoryDTO | null;
@@ -74,6 +75,9 @@ export default function AdminCategoriesPage() {
                     ) : (
                       c.label
                     )}
+                    {!c.labelEs && (
+                      <Badge tone="warning" className="ml-2 text-label-xs">No ES</Badge>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-ink-muted">{c.slug}</td>
                   <td className="px-4 py-3 text-ink-muted">{c.sortOrder}</td>
@@ -117,6 +121,7 @@ function CategoryForm({
   onCancel: () => void;
 }) {
   const [label, setLabel] = useState(category?.label ?? '');
+  const [labelEs, setLabelEs] = useState(category?.labelEs ?? '');
   const [slug, setSlug] = useState(category?.slug ?? '');
   const [imageUrl, setImageUrl] = useState(category?.imageUrl ?? '');
   const [sortOrder, setSortOrder] = useState(String(category?.sortOrder ?? 0));
@@ -143,6 +148,7 @@ function CategoryForm({
     setBusy(true);
     const body = {
       label,
+      labelEs: esOrNull(labelEs),
       slug: slug || undefined,
       imageUrl: imageUrl || null,
       sortOrder: Number(sortOrder),
@@ -163,9 +169,17 @@ function CategoryForm({
   return (
     <form onSubmit={submit} className="mt-6 rounded-card border border-border bg-surface p-6">
       <h2 className="mb-4 font-display text-headline-md text-primary">{category ? 'Edit category' : 'New category'}</h2>
+      <div className="mb-4">
+        <BilingualField
+          label="Label"
+          required
+          value={label}
+          onChange={setLabel}
+          valueEs={labelEs}
+          onChangeEs={setLabelEs}
+        />
+      </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <label className="block"><span className="mb-1 block text-label-sm font-semibold uppercase tracking-wide text-ink-muted">Label *</span>
-          <input className={input} required value={label} onChange={(e) => setLabel(e.target.value)} /></label>
         <label className="block"><span className="mb-1 block text-label-sm font-semibold uppercase tracking-wide text-ink-muted">Slug</span>
           <input className={input} value={slug} placeholder="auto from label" onChange={(e) => setSlug(e.target.value)} /></label>
         <label className="block sm:col-span-2"><span className="mb-1 block text-label-sm font-semibold uppercase tracking-wide text-ink-muted">Image URL</span>

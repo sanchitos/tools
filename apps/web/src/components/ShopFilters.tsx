@@ -1,5 +1,6 @@
 import type { BrandDTO, CategoryDTO } from '@tools-jamaica/shared';
 import { Accordion, Input } from './ui/index.js';
+import { useT } from '../i18n/LocaleContext.js';
 
 interface Props {
   categories: CategoryDTO[];
@@ -31,9 +32,11 @@ export function ShopFilters({
   onMaxPriceChange,
   onToggleInStock,
 }: Props) {
+  const t = useT();
+
   return (
     <div className="px-4 lg:px-0">
-      <Accordion title="Category" defaultOpen>
+      <Accordion title={t('shop.filter.category')} defaultOpen>
         <div className="space-y-3">
           {categories
             .filter((c) => c.parentId === null)
@@ -64,10 +67,10 @@ export function ShopFilters({
         </div>
       </Accordion>
 
-      <Accordion title="Brand" defaultOpen>
+      <Accordion title={t('shop.filter.brand')} defaultOpen>
         <div className="space-y-1.5">
           {brands.length === 0 ? (
-            <p className="text-body-sm text-ink-muted">No brands</p>
+            <p className="text-body-sm text-ink-muted">{t('shop.filter.noBrands')}</p>
           ) : (
             brands.map((b) => (
               <Check
@@ -81,13 +84,13 @@ export function ShopFilters({
         </div>
       </Accordion>
 
-      <Accordion title="Price (J$)">
+      <Accordion title={t('shop.filter.price')}>
         <div className="flex items-center gap-2">
           <Input
             type="number"
             inputMode="numeric"
             value={minPrice}
-            placeholder="Min"
+            placeholder={t('shop.filter.min')}
             onChange={(e) => onMinPriceChange(e.target.value)}
           />
           <span className="text-ink-muted">–</span>
@@ -95,14 +98,14 @@ export function ShopFilters({
             type="number"
             inputMode="numeric"
             value={maxPrice}
-            placeholder="Max"
+            placeholder={t('shop.filter.max')}
             onChange={(e) => onMaxPriceChange(e.target.value)}
           />
         </div>
       </Accordion>
 
       <div className="py-3">
-        <Check label="In stock only" checked={inStock} onChange={onToggleInStock} />
+        <Check label={t('shop.filter.inStockOnly')} checked={inStock} onChange={onToggleInStock} />
       </div>
     </div>
   );

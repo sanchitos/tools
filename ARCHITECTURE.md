@@ -49,7 +49,7 @@ tools-jamaica/
 │   │   │   │   └── admin/           # role-gated CRUD + image upload
 │   │   │   └── types/               # db row types, express augmentation
 │   │   ├── supabase/
-│   │   │   ├── migrations/          # 0001_init … 0004_storage (run by hand)
+│   │   │   ├── migrations/          # 0001_init … 0010_homepage_content (run by hand)
 │   │   │   └── seed.sql
 │   │   └── test/                    # vitest + supertest (hermetic, mocked)
 │   └── web/                         # React + Vite SPA
@@ -160,6 +160,35 @@ Supabase SQL Editor, in order.
   `alt_text`, `sort_order`. A partial unique index enforces **one primary per
   product**.
 - **`product_specs`** / **`product_highlights`** — power the detail page.
+- **`home_hero`** — the editable hero. A **singleton row** (`id boolean primary
+  key check (id)`), not a key/value settings table: the hero has a fixed designed
+  shape, so typed columns keep `not null` meaningful and give a compile-time DTO.
+- **`home_tiles`** — `slot` (`promo` | `service` | `ticker`), title/body, `icon`,
+  `image_url`, `href`, `sort_order`, `is_published`. One table for three
+  homepage blocks that differ only in where they render. The two promo cards no
+  longer borrow a category's photo.
+- **`store_locations`** — branches, rendered by the Footer on every page and the
+  homepage "Visit us" block. `address` is unique (idempotent seed) and never
+  translated.
+- `brands.is_featured` drives the homepage brand rail.
+
+### Bilingual content (`_es` sibling columns)
+
+Every admin-typed column has a nullable `<col>_es` sibling (`0009_i18n_content`).
+NULL — **and blank, which is guarded at both ends** — means "not translated yet"
+and falls back to English, so the storefront is never broken mid-translation.
+Deliberately **not** translated: `brands.name` (proper nouns and trademarks, and
+`slug` is the URL-facing filter facet), every `slug` (one canonical URL per
+product), `store_locations.address`, and `order_items.product_name`, which always
+snapshots English because orders are read through the English admin UI.
+
+`products.search_vector` is one **mixed-config** generated column —
+`to_tsvector('english', …)` over the English columns *and* `to_tsvector('spanish',
+…)` over the `_es` ones. Both two-arg forms are IMMUTABLE and so legal in a
+generated expression. One mixed vector rather than a second column is what makes
+partial translation searchable: the RPC ORs in an English tsquery as a
+lower-weighted fallback leg, so a Spanish shopper still finds products whose
+`_es` fields are still NULL.
 
 ### RLS posture
 
@@ -172,11 +201,24 @@ tables.
 
 ### Storage
 
-Public-read buckets `product-images` and `brand-logos`. Admin uploads go
-**through Express → Supabase Storage** (service role); the API returns the public
-URL and persists it. Deleting a product/image removes its Storage object, and an
-admin **orphan-sweep** endpoint removes unreferenced objects (only within our
-bucket — external seed URLs are never touched).
+Public-read buckets `product-images`, `brand-logos` and `site-images` (hero,
+tiles, location photos). Admin uploads go **through Express → Supabase Storage**
+(service role); the API returns the public URL and persists it. Every helper in
+`lib/storage.ts` takes the bucket **first, with no default** — a wrong bucket
+would silently leave orphans, and these functions back a destructive sweep.
+
+Deleting a product/image/brand/tile/location removes its Storage object, and an
+admin **orphan-sweep** endpoint removes unreferenced objects (only within our own
+buckets — `pathFromPublicUrl` returns null for anything else, so external seed
+URLs are never touched). The sweep has three safety rails, all load-bearing:
+
+1. A **registry** pairing each swept bucket with every column that references it.
+2. **`site-images` is excluded** from that registry — its URLs span three tables,
+   and one missed source is a deleted hero.
+3. A **tripwire**: zero references against a non-empty bucket means the reference
+   query broke, not that every object is unused — it logs and skips rather than
+   emptying the bucket. The admin button always **dry-runs first** and confirms
+   against a real file list.
 
 ---
 
@@ -195,6 +237,16 @@ pageSize }`.
 | GET | `/products/:slug` | Full detail incl. images, specs, highlights, related. Published only. |
 | GET | `/categories` | Published categories with `image_url` + product counts. |
 | GET | `/brands` | Brand list / filter facet. |
+| GET | `/brands/featured` | Homepage brand rail (registered above any `:slug` route). |
+| GET | `/home` | The whole editable homepage in **one** payload: hero, promos, services, ticker, featured brands, locations. |
+| GET | `/locations` | Branches — separate and small, because the Footer renders on every page. |
+
+Every public catalog route accepts **`?lang=en|es`** (`.catch('en')`, so an
+unknown value degrades rather than 400-ing a storefront page). A query param, not
+a custom header: `x-locale` is not CORS-safelisted (it would break the documented
+`WEB_ORIGIN` dev path) and a header makes responses vary on an invisible
+dimension. The **public DTO shapes are unchanged** — the API resolves the
+language in the mappers, so no storefront component had to change.
 
 ### Admin (`requireRole('admin')`, CSRF on mutations)
 
@@ -204,10 +256,19 @@ pageSize }`.
 | POST/PATCH/DELETE | `/admin/products/:id/images…` | Multipart upload; reorder; set-primary; delete (removes the Storage object). |
 | GET/POST/PATCH/DELETE | `/admin/categories…` | Category CRUD (delete blocked with 409 if products reference it). |
 | GET/POST/PATCH/DELETE | `/admin/brands…` | Brand CRUD. |
-| POST | `/admin/images/cleanup-orphans` | Sweep unreferenced Storage objects. |
+| GET/PATCH/POST | `/admin/home…` | Hero (singleton upsert) + hero image upload. |
+| GET/POST/PATCH/DELETE | `/admin/home/tiles…` | Tile CRUD + per-tile image upload. |
+| GET/POST/PATCH/DELETE | `/admin/locations…` | Store-location CRUD + photo upload. |
+| POST | `/admin/brands/:id/logo` | Brand logo upload (replaces + deletes the old object). |
+| POST | `/admin/images/cleanup-orphans` | Sweep unreferenced Storage objects. `?dryRun=true` resolves the list without deleting. |
 
 **Admin-only fields** (`is_published`, `sort_order`, ids, timestamps) are stripped
-from the **public** DTOs and only exposed on the **admin** DTOs.
+from the **public** DTOs and only exposed on the **admin** DTOs — as are the raw
+`*Es` fields. Admin DTOs are **always English**, enforced structurally: `locale`
+is a trailing, defaulted parameter on every mapper, so "admin gets English" means
+simply not passing an argument. An ambient/`AsyncLocalStorage` locale would flow
+into the admin DTOs and the product editor would then overwrite the English
+columns with Spanish text. Do not "simplify" this into a global.
 
 ---
 
@@ -227,11 +288,40 @@ from the **public** DTOs and only exposed on the **admin** DTOs.
   `/api/v1`, `credentials: 'include'`, `ApiError` type, transparent
   401→refresh→retry, a multipart `uploadFile` helper, and a method per endpoint.
   `useAsync` is the standard data-fetch hook.
+- **Bilingual UI, hand-rolled** (`web/src/i18n/*`). For a two-locale,
+  two-plural-form, no-RTL problem, `i18next` + `react-i18next` is ~40 kB gzipped
+  and a plugin architecture we'd use none of — and the one thing a library buys,
+  compile-time key safety, is free here: `en.ts` is a flat `as const` map of
+  dotted keys, `TranslationKey = keyof typeof en`, and `es.ts` is typed as
+  `Dictionary`, so a missing key is a compile error and an extra one an
+  excess-property error. `t(key, vars?)` is a dictionary lookup plus a `{name}`
+  regex replace.
+  - **Detection:** `localStorage['tj_locale']` → first `navigator.language`
+    starting with `es` → English. `main.tsx` calls `setApiLocale(...)` **before**
+    `createRoot().render(...)`, because `HomePage` fires a catalog request on
+    mount. `api.ts` never imports from `i18n/`; `main.tsx` imports both.
+  - **Refetch on switch:** `<Routes key={locale}>` remounts the routed tree, so
+    all 12+ catalog call sites refire. Adding `locale` to every `useAsync` dep
+    array and missing one yields a half-translated page. The switcher is hidden
+    on `/checkout`, where the remount would wipe a half-typed address.
+  - **`ui/*` primitives never import from `i18n/`.** They are shared with the
+    admin back-office, which stays English by agreement, so they take
+    English-defaulted label props (`viewAllLabel`, `labels`, `closeLabel`) and
+    the *public* callers pass `t(...)`.
+  - Admin **chrome** stays English; admin **forms** get side-by-side en/es
+    inputs via `components/admin/BilingualField.tsx`, and the product/category
+    lists carry a "No ES" badge so untranslated rows are findable.
 - **Pages.** Public: Home (hero, trust bar, departments, featured rail, CTA),
   Shop (URL-synced filters/search/sort + pagination), Product detail (gallery,
   specs, highlights, related). Admin (utilitarian, same tokens): login, products
   list, product editor + image manager, categories, brands — gated by
-  `AuthContext` + `AdminLayout`.
+  `AuthContext` + `AdminLayout`, plus **Homepage** (hero + the three tile slots)
+  and **Locations**.
+
+The homepage is **admin-editable**: hero, promo cards, trust tiles, ticker,
+featured brands and branches all come from `GET /home`. Nothing on it is
+hardcoded copy any more except its own section chrome, which is a translation
+key.
 
 Only the Stitch **Home** screen is fully designed; Shop, Product detail, and the
 admin pages are built in the same design language.
@@ -306,5 +396,5 @@ Documented extension points so these are additive later, not refactors:
   read-only tool-use over the catalog service.
 
 Explicitly out of scope now: guest checkout, review submission, email flows
-beyond admin auth, i18n. (Rating/review columns exist as static display fields.)
+beyond admin auth. (Rating/review columns exist as static display fields.)
 ```

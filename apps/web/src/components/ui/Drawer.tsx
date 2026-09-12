@@ -9,10 +9,20 @@ interface Props {
   onClose: () => void;
   footer?: ReactNode;
   children: ReactNode;
+  /** English default; public callers pass t(...). ui/* never imports i18n/. */
+  closeLabel?: string;
 }
 
 /** Slide-in panel (mobile filters, department nav, cart). Portal, Esc + backdrop close. */
-export function Drawer({ open, side = 'right', title, onClose, footer, children }: Props) {
+export function Drawer({
+  open,
+  side = 'right',
+  title,
+  onClose,
+  footer,
+  children,
+  closeLabel = 'Close',
+}: Props) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -41,7 +51,7 @@ export function Drawer({ open, side = 'right', title, onClose, footer, children 
             <button
               type="button"
               onClick={onClose}
-              aria-label="Close"
+              aria-label={closeLabel}
               className="rounded p-1 text-ink-muted hover:bg-surface-muted hover:text-ink"
             >
               <Icon name="close" className="text-2xl" />

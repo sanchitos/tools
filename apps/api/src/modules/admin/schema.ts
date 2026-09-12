@@ -8,6 +8,20 @@ export { adminOrderListQuerySchema, updateOrderStatusSchema } from '../orders/sc
 const uuid = z.string().uuid();
 const nullableStr = z.string().trim().max(4000).nullable();
 
+/**
+ * A Spanish sibling field. Blank -> null, ALWAYS: `''` is not a translation,
+ * and `row.name_es ?? row.name` on an empty string would render a blank product
+ * name on the storefront. Guarded at both ends — here on write, and by pick()
+ * in lib/locale.ts on read.
+ */
+const esText = z
+  .string()
+  .trim()
+  .max(4000)
+  .nullable()
+  .optional()
+  .transform((v) => (v && v.length ? v : null));
+
 export const idParamSchema = z.object({ id: uuid });
 export const imageParamsSchema = z.object({ id: uuid, imageId: uuid });
 
@@ -15,22 +29,28 @@ export const imageParamsSchema = z.object({ id: uuid, imageId: uuid });
 
 const specInput = z.object({
   label: z.string().trim().min(1).max(200),
+  labelEs: esText,
   value: z.string().trim().min(1).max(1000),
+  valueEs: esText,
   sortOrder: z.number().int().nonnegative().optional(),
 });
 
 const highlightInput = z.object({
   text: z.string().trim().min(1).max(500),
+  textEs: esText,
   sortOrder: z.number().int().nonnegative().optional(),
 });
 
 export const productCreateSchema = z.object({
   name: z.string().trim().min(1).max(300),
+  nameEs: esText,
   slug: z.string().trim().min(1).max(200).optional(),
   categoryId: uuid,
   brandId: uuid.nullable().optional(),
   shortDescription: nullableStr.optional(),
+  shortDescriptionEs: esText,
   description: nullableStr.optional(),
+  descriptionEs: esText,
   price: z.number().nonnegative(),
   stock: z.number().int().nonnegative().default(0),
   sku: z.string().trim().min(1).max(120).nullable().optional(),
@@ -43,11 +63,14 @@ export const productCreateSchema = z.object({
 export const productUpdateSchema = z
   .object({
     name: z.string().trim().min(1).max(300),
+    nameEs: esText,
     slug: z.string().trim().min(1).max(200),
     categoryId: uuid,
     brandId: uuid.nullable(),
     shortDescription: nullableStr,
+    shortDescriptionEs: esText,
     description: nullableStr,
+    descriptionEs: esText,
     price: z.number().nonnegative(),
     stock: z.number().int().nonnegative(),
     sku: z.string().trim().min(1).max(120).nullable(),
@@ -96,6 +119,7 @@ export type ReorderInput = z.infer<typeof reorderSchema>;
 
 export const categoryCreateSchema = z.object({
   label: z.string().trim().min(1).max(120),
+  labelEs: esText,
   slug: z.string().trim().min(1).max(120).optional(),
   imageUrl: z.string().url().max(2000).nullable().optional(),
   sortOrder: z.number().int().nonnegative().optional(),
@@ -112,13 +136,96 @@ export type CategoryUpdate = z.infer<typeof categoryUpdateSchema>;
 // --- Brands ----------------------------------------------------------------
 
 export const brandCreateSchema = z.object({
+  // No `nameEs`: brand names are proper nouns and registered trademarks, and
+  // `slug` is the URL-facing filter facet (see 0009_i18n_content.sql).
   name: z.string().trim().min(1).max(120),
   slug: z.string().trim().min(1).max(120).optional(),
   logoUrl: z.string().url().max(2000).nullable().optional(),
   sortOrder: z.number().int().nonnegative().optional(),
+  /** Shown in the homepage brand rail. Inherited by brandUpdateSchema via .partial(). */
+  isFeatured: z.boolean().default(false),
 });
 
 export const brandUpdateSchema = brandCreateSchema.partial();
 
 export type BrandCreate = z.infer<typeof brandCreateSchema>;
 export type BrandUpdate = z.infer<typeof brandUpdateSchema>;
+
+// --- Homepage content ------------------------------------------------------
+
+/**
+ * Mirrors `IconName` in apps/web/src/components/ui/Icon.tsx. The DB column is
+ * plain `text` because IconName is a *web* type Postgres can't see, so this
+ * literal union is the validation boundary — and the admin control is a Select
+ * of these values, never free text. Keep in step with Icon.tsx.
+ */
+export const ICON_NAMES = [
+  'search', 'menu', 'close', 'chevronDown', 'chevronUp', 'chevronLeft', 'chevronRight',
+  'cart', 'user', 'phone', 'whatsapp', 'star', 'starHalf', 'filter', 'sort', 'grid',
+  'truck', 'shield', 'tag', 'check', 'arrowRight', 'headset', 'pin', 'wrench',
+] as const;
+
+const iconName = z.enum(ICON_NAMES).nullable().optional();
+const href = z.string().trim().max(2000).nullable().optional();
+
+export const heroUpdateSchema = z
+  .object({
+    eyebrow: nullableStr,
+    eyebrowEs: esText,
+    headline: z.string().trim().min(1).max(300),
+    headlineEs: esText,
+    subcopy: nullableStr,
+    subcopyEs: esText,
+    ctaLabel: z.string().trim().max(120).nullable(),
+    ctaLabelEs: esText,
+    ctaHref: z.string().trim().min(1).max(2000),
+    imageUrl: z.string().url().max(2000).nullable(),
+  })
+  .partial();
+
+export const tileCreateSchema = z.object({
+  slot: z.enum(['promo', 'service', 'ticker']),
+  title: z.string().trim().min(1).max(200),
+  titleEs: esText,
+  body: nullableStr.optional(),
+  bodyEs: esText,
+  icon: iconName,
+  imageUrl: z.string().url().max(2000).nullable().optional(),
+  href,
+  sortOrder: z.number().int().nonnegative().optional(),
+  isPublished: z.boolean().default(true),
+});
+
+export const tileUpdateSchema = tileCreateSchema.partial();
+
+export type HeroUpdate = z.infer<typeof heroUpdateSchema>;
+export type TileCreate = z.infer<typeof tileCreateSchema>;
+export type TileUpdate = z.infer<typeof tileUpdateSchema>;
+
+// --- Store locations -------------------------------------------------------
+
+export const locationCreateSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  nameEs: esText,
+  /** Not translated — an address is an address. */
+  address: z.string().trim().min(1).max(500),
+  phone: z.string().trim().max(60).nullable().optional(),
+  hours: z.string().trim().max(300).nullable().optional(),
+  hoursEs: esText,
+  mapUrl: z.string().url().max(2000).nullable().optional(),
+  imageUrl: z.string().url().max(2000).nullable().optional(),
+  sortOrder: z.number().int().nonnegative().optional(),
+  isPublished: z.boolean().default(true),
+});
+
+export const locationUpdateSchema = locationCreateSchema.partial();
+
+export type LocationCreate = z.infer<typeof locationCreateSchema>;
+export type LocationUpdate = z.infer<typeof locationUpdateSchema>;
+
+// --- Storage maintenance ---------------------------------------------------
+
+/** `?dryRun=true` resolves the orphan list without deleting anything. */
+export const orphanCleanupQuerySchema = z.object({
+  dryRun: z.preprocess((v) => v === 'true' || v === true, z.boolean().optional()),
+});

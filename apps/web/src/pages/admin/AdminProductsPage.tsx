@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { AdminProductListItem } from '@tools-jamaica/shared';
-import { api } from '../../lib/api.js';
+import { api, ApiError } from '../../lib/api.js';
 import { useAsync } from '../../lib/useAsync.js';
 import { Badge, Button, ConfirmDialog, ImageWithFallback, Loader } from '../../components/ui/index.js';
 import { formatPrice } from '../../lib/format.js';
@@ -14,6 +14,46 @@ export default function AdminProductsPage() {
   );
   const [toDelete, setToDelete] = useState<AdminProductListItem | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // --- Unused-image sweep --------------------------------------------------
+  // ALWAYS scans first (dryRun). The delete is irreversible and the admin has
+  // never seen these files, so the confirmation names the actual paths rather
+  // than asking them to authorise a number.
+  const [scanning, setScanning] = useState(false);
+  const [orphans, setOrphans] = useState<string[] | null>(null);
+  const [sweepNote, setSweepNote] = useState<string | null>(null);
+  const [sweepError, setSweepError] = useState<string | null>(null);
+
+  const scanOrphans = async () => {
+    setScanning(true);
+    setSweepNote(null);
+    setSweepError(null);
+    try {
+      const result = await api.cleanupOrphans(true);
+      // Nothing to confirm: say so inline rather than opening an empty dialog.
+      if (result.paths.length === 0) setSweepNote('No unused images found.');
+      else setOrphans(result.paths);
+    } catch (e) {
+      setSweepError(e instanceof ApiError ? e.message : 'Scan failed');
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const confirmSweep = async () => {
+    setBusy(true);
+    setSweepError(null);
+    try {
+      const result = await api.cleanupOrphans();
+      setOrphans(null);
+      setSweepNote(`Deleted ${result.deleted} unused image${result.deleted === 1 ? '' : 's'}.`);
+      reload(); // thumbnails may now be missing
+    } catch (e) {
+      setSweepError(e instanceof ApiError ? e.message : 'Cleanup failed');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const confirmDelete = async () => {
     if (!toDelete) return;
@@ -31,10 +71,19 @@ export default function AdminProductsPage() {
     <div>
       <div className="flex items-center justify-between">
         <h1 className="font-display text-headline-lg text-primary">Products</h1>
-        <Link to="/admin/products/new">
-          <Button variant="accent">+ New product</Button>
-        </Link>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" disabled={scanning} onClick={scanOrphans}>
+            {scanning ? 'Scanning…' : 'Clean up unused images'}
+          </Button>
+          <Link to="/admin/products/new">
+            <Button variant="accent">+ New product</Button>
+          </Link>
+        </div>
       </div>
+
+      {scanning && <Loader className="mt-3" />}
+      {sweepNote && <p className="mt-3 text-body-md text-success">{sweepNote}</p>}
+      {sweepError && <p className="mt-3 text-body-md text-error">{sweepError}</p>}
 
       <input
         type="search"
@@ -68,6 +117,9 @@ export default function AdminProductsPage() {
                     <div className="flex items-center gap-3">
                       <ImageWithFallback src={p.primaryImage?.url} alt={p.name} className="h-10 w-10 shrink-0 rounded" />
                       <span className="font-medium text-ink">{p.name}</span>
+                      {!p.nameEs && (
+                        <Badge tone="warning" className="shrink-0 text-label-xs">No ES</Badge>
+                      )}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-ink-muted">{p.category?.label ?? '—'}</td>
@@ -95,6 +147,32 @@ export default function AdminProductsPage() {
           </table>
         </div>
       )}
+
+      <ConfirmDialog
+        open={orphans !== null}
+        danger
+        busy={busy}
+        title={`Delete ${orphans?.length ?? 0} unused image${orphans?.length === 1 ? '' : 's'}?`}
+        message={
+          <div>
+            <p>
+              These files are in the product-image and brand-logo storage and are no longer
+              referenced by any product or brand. Deleting them can&apos;t be undone.
+            </p>
+            <ul className="mt-3 max-h-48 overflow-auto rounded border border-border bg-surface-muted p-2 text-label-sm">
+              {(orphans ?? []).slice(0, 20).map((path) => (
+                <li key={path} className="truncate font-mono">{path}</li>
+              ))}
+              {(orphans?.length ?? 0) > 20 && (
+                <li className="pt-1 text-ink-muted">…and {(orphans?.length ?? 0) - 20} more</li>
+              )}
+            </ul>
+          </div>
+        }
+        confirmLabel="Delete files"
+        onConfirm={confirmSweep}
+        onCancel={() => setOrphans(null)}
+      />
 
       <ConfirmDialog
         open={!!toDelete}

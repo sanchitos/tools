@@ -1,25 +1,25 @@
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { useAsync } from '../lib/useAsync.js';
-import { WHATSAPP_URL } from '../lib/contact.js';
-import { Container, ImageWithFallback, Loader, Rail, Icon } from '../components/ui/index.js';
+import { whatsappUrl } from '../lib/contact.js';
+import { Container, ImageWithFallback, Loader, Rail } from '../components/ui/index.js';
 import { ProductCard } from '../components/ProductCard.js';
+import { HeroSection, PromoTiles } from '../components/home/HeroSection.js';
+import { ServiceTiles } from '../components/home/ServiceTiles.js';
+import { BrandRail } from '../components/home/BrandRail.js';
+import { LocationsSection } from '../components/home/LocationsSection.js';
+import { useT } from '../i18n/LocaleContext.js';
 
-const TICKER = [
-  'Islandwide delivery',
-  'Trade pricing available — ask us',
-  'Genuine brands only',
-  'WhatsApp us for same-day quotes',
-];
-
-const SERVICES = [
-  { icon: 'truck' as const, title: 'Islandwide delivery', body: 'We deliver to every parish, fast.' },
-  { icon: 'shield' as const, title: 'Genuine brands', body: 'Quality hardware you can build on.' },
-  { icon: 'tag' as const, title: 'Trade pricing', body: 'Ask about pricing for contractors.' },
-  { icon: 'headset' as const, title: 'Real support', body: 'WhatsApp us — a person answers.' },
-];
-
+/**
+ * The homepage is admin-editable: the hero, the two promo cards, the trust
+ * tiles, the ticker, the featured-brand rail and the branch list all come from
+ * `GET /home` (one payload — see catalog/homeService.ts). Nothing on this page
+ * is hardcoded copy any more except its own section chrome, which is a
+ * translation key.
+ */
 export default function HomePage() {
+  const t = useT();
+  const home = useAsync(() => api.home(), []);
   const categories = useAsync(() => api.categories(), []);
   const featured = useAsync(() => api.featured(), []);
   const newArrivals = useAsync(() => api.listProducts({ sort: 'name', pageSize: 12 }), []);
@@ -27,20 +27,25 @@ export default function HomePage() {
   // Home shows top-level departments only; a subcategory's products still
   // surface when its parent department is selected (server-side expansion).
   const categoryList = (categories.data ?? []).filter((c) => c.parentId === null);
-  const [promoA, promoB] = categoryList;
+  const ticker = home.data?.ticker ?? [];
 
   return (
     <>
       {/* Promo ticker */}
-      <div className="h-10 overflow-hidden bg-accent text-accent-fg">
-        <div className="flex h-full w-max animate-marquee items-center whitespace-nowrap motion-reduce:animate-none">
-          {[...TICKER, ...TICKER].map((t, i) => (
-            <span key={i} className="px-8 text-label-sm font-semibold uppercase tracking-wide">
-              {t}
-            </span>
-          ))}
+      {ticker.length > 0 && (
+        <div className="h-10 overflow-hidden bg-accent text-accent-fg">
+          <div className="flex h-full w-max animate-marquee items-center whitespace-nowrap motion-reduce:animate-none">
+            {[...ticker, ...ticker].map((item, i) => (
+              <span
+                key={`${item.id}-${i}`}
+                className="px-8 text-label-sm font-semibold uppercase tracking-wide"
+              >
+                {item.title}
+              </span>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Department circle rail */}
       <section className="border-b border-border bg-surface">
@@ -48,7 +53,10 @@ export default function HomePage() {
           {categories.loading ? (
             <Loader />
           ) : (
-            <Rail>
+            <Rail
+              scrollLeftLabel={t('common.scrollLeft')}
+              scrollRightLabel={t('common.scrollRight')}
+            >
               {categoryList.map((c) => (
                 <Link
                   key={c.id}
@@ -69,77 +77,25 @@ export default function HomePage() {
       {/* Hero row */}
       <section id="departments" className="scroll-mt-24">
         <Container className="py-8">
-          <div className="grid grid-cols-1 gap-gutter lg:grid-cols-[3fr_2fr]">
-            <div className="relative aspect-[2.4/1] overflow-hidden rounded-card bg-surface-inverse lg:aspect-auto lg:h-[377px]">
-              <div
-                className="absolute inset-0 bg-cover bg-center"
-                style={{ backgroundImage: 'url(/hero.jpg)' }}
-                aria-hidden="true"
-              />
-              <div className="absolute inset-0 bg-gradient-to-r from-surface-inverse via-surface-inverse/90 to-surface-inverse/40" />
-              <div className="relative flex h-full flex-col justify-center p-6 lg:p-10">
-                <p className="text-label-lg font-semibold uppercase tracking-widest text-accent">
-                  Tools, Hardware &amp; Supplies
-                </p>
-                <h1 className="mt-3 max-w-md font-display text-headline-lg leading-tight text-white lg:text-display-md">
-                  Your one-stop shop for every home-improvement project.
-                </h1>
-                <p className="mt-3 hidden max-w-md text-body-md text-white/80 lg:block">
-                  Professional-grade doors, faucets, flooring, tiles and more — sourced for contractors
-                  and DIY builders across Jamaica.
-                </p>
-                <div className="mt-6 flex flex-wrap gap-3">
-                  <Link
-                    to="/shop"
-                    className="rounded bg-accent px-6 py-3 text-label-lg font-semibold text-accent-fg shadow-hard transition-colors hover:bg-accent-hover"
-                  >
-                    Shop the catalog
-                  </Link>
-                </div>
-              </div>
+          {home.loading ? (
+            <Loader />
+          ) : (
+            <div className="grid grid-cols-1 gap-gutter lg:grid-cols-[3fr_2fr]">
+              <HeroSection hero={home.data?.hero ?? null} />
+              <PromoTiles tiles={home.data?.promos ?? []} shopNowLabel={t('common.shopNow')} />
             </div>
-
-            <div className="flex flex-col gap-gutter">
-              {[
-                { c: promoA, href: '/shop?sort=featured', label: 'Featured picks' },
-                { c: promoB, href: '/shop?inStock=true', label: 'In stock now' },
-              ].map(({ c, href, label }, i) => (
-                <Link
-                  key={i}
-                  to={href}
-                  className="relative h-[140px] flex-1 overflow-hidden rounded-card lg:h-[179px] lg:flex-none"
-                >
-                  <ImageWithFallback src={c?.imageUrl} alt="" className="h-full w-full" imgClassName="object-cover" />
-                  <span className="absolute inset-0 bg-gradient-to-t from-ink/80 via-ink/10 to-transparent" />
-                  <span className="absolute inset-x-0 bottom-0 p-4">
-                    <span className="font-display text-headline-sm text-white">{label}</span>
-                    <span className="mt-2 inline-block rounded bg-accent px-3 py-1 text-label-sm font-semibold text-accent-fg">
-                      Shop now
-                    </span>
-                  </span>
-                </Link>
-              ))}
-            </div>
-          </div>
+          )}
         </Container>
       </section>
 
       {/* Services / trust row */}
-      <section className="border-y border-border bg-surface-muted">
-        <Container className="grid grid-cols-2 gap-6 py-8 lg:grid-cols-4">
-          {SERVICES.map((s) => (
-            <div key={s.title} className="flex items-start gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-accent text-accent-fg">
-                <Icon name={s.icon} className="text-xl" />
-              </span>
-              <div>
-                <h3 className="text-body-sm font-bold text-ink">{s.title}</h3>
-                <p className="mt-0.5 text-label-sm text-ink-muted">{s.body}</p>
-              </div>
-            </div>
-          ))}
-        </Container>
-      </section>
+      {(home.data?.services.length ?? 0) > 0 && (
+        <section className="border-y border-border bg-surface-muted">
+          <Container className="py-8">
+            <ServiceTiles tiles={home.data?.services ?? []} />
+          </Container>
+        </section>
+      )}
 
       {/* Featured rail */}
       <section>
@@ -149,9 +105,15 @@ export default function HomePage() {
           ) : featured.error ? (
             <p className="text-error">{featured.error}</p>
           ) : (featured.data ?? []).length === 0 ? (
-            <p className="text-center text-ink-muted">No featured products yet.</p>
+            <p className="text-center text-ink-muted">{t('home.noFeatured')}</p>
           ) : (
-            <Rail title="Featured this week" viewAllHref="/shop?sort=featured">
+            <Rail
+              title={t('home.featuredRail')}
+              viewAllHref="/shop?sort=featured"
+              viewAllLabel={t('common.viewAll')}
+              scrollLeftLabel={t('common.scrollLeft')}
+              scrollRightLabel={t('common.scrollRight')}
+            >
               {(featured.data ?? []).map((p) => (
                 <div key={p.id} className="w-[220px] shrink-0 snap-start">
                   <ProductCard product={p} />
@@ -162,21 +124,35 @@ export default function HomePage() {
         </Container>
       </section>
 
+      {/* Featured brands */}
+      {(home.data?.featuredBrands.length ?? 0) > 0 && (
+        <section className="border-t border-border bg-surface-muted">
+          <Container className="py-12">
+            <BrandRail
+              brands={home.data?.featuredBrands ?? []}
+              title={t('home.topBrands')}
+              scrollLeftLabel={t('common.scrollLeft')}
+              scrollRightLabel={t('common.scrollRight')}
+            />
+          </Container>
+        </section>
+      )}
+
       {/* Banner strip */}
       <section>
-        <Container className="pb-14">
+        <Container className="py-14">
           <div className="flex flex-col items-start gap-4 rounded-card bg-primary p-8 text-primary-fg sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="font-display text-headline-md">Need it today?</h2>
-              <p className="mt-1 text-body-md text-primary-fg/80">Message us on WhatsApp for fast quotes.</p>
+              <h2 className="font-display text-headline-md">{t('home.needItToday')}</h2>
+              <p className="mt-1 text-body-md text-primary-fg/80">{t('home.needItTodaySub')}</p>
             </div>
             <a
-              href={WHATSAPP_URL}
+              href={whatsappUrl(t('whatsapp.defaultMessage'))}
               target="_blank"
               rel="noopener noreferrer"
               className="shrink-0 rounded bg-accent px-6 py-3 text-label-lg font-semibold text-accent-fg transition-colors hover:bg-accent-hover"
             >
-              WhatsApp us
+              {t('common.whatsappUs')}
             </a>
           </div>
         </Container>
@@ -186,9 +162,9 @@ export default function HomePage() {
       <section>
         <Container className="pb-14">
           <div className="mb-6 flex items-end justify-between">
-            <h2 className="font-display text-headline-lg text-primary">Shop by department</h2>
+            <h2 className="font-display text-headline-lg text-primary">{t('home.shopByDepartment')}</h2>
             <Link to="/shop" className="hidden text-label-lg font-semibold text-primary hover:text-accent sm:inline">
-              View all →
+              {t('common.viewAll')}
             </Link>
           </div>
           {categories.loading ? (
@@ -196,7 +172,7 @@ export default function HomePage() {
           ) : categories.error ? (
             <p className="text-error">{categories.error}</p>
           ) : (
-            <div className="grid grid-cols-2 gap-gutter md:grid-cols-4 lg:grid-cols-6">
+            <div className="grid grid-cols-1 gap-gutter sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6">
               {categoryList.map((c) => (
                 <Link
                   key={c.id}
@@ -223,9 +199,15 @@ export default function HomePage() {
           ) : newArrivals.error ? (
             <p className="text-error">{newArrivals.error}</p>
           ) : (newArrivals.data?.items ?? []).length === 0 ? (
-            <p className="text-center text-ink-muted">No products yet.</p>
+            <p className="text-center text-ink-muted">{t('home.noProducts')}</p>
           ) : (
-            <Rail title="More from the catalog" viewAllHref="/shop">
+            <Rail
+              title={t('home.catalogRail')}
+              viewAllHref="/shop"
+              viewAllLabel={t('common.viewAll')}
+              scrollLeftLabel={t('common.scrollLeft')}
+              scrollRightLabel={t('common.scrollRight')}
+            >
               {(newArrivals.data?.items ?? []).map((p) => (
                 <div key={p.id} className="w-[220px] shrink-0 snap-start">
                   <ProductCard product={p} />
@@ -236,18 +218,34 @@ export default function HomePage() {
         </Container>
       </section>
 
+      {/* Locations */}
+      {(home.data?.locations.length ?? 0) > 0 && (
+        <section className="border-t border-border">
+          <Container className="py-14">
+            <LocationsSection
+              locations={home.data?.locations ?? []}
+              labels={{
+                heading: t('home.visitUs'),
+                sub: t('home.visitUsSub'),
+                directions: t('home.getDirections'),
+              }}
+            />
+          </Container>
+        </section>
+      )}
+
       {/* CTA band */}
       <section className="bg-surface-inverse">
         <Container className="flex flex-col items-start gap-6 py-16 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="font-display text-headline-lg text-white">Ready to start your next project?</h2>
-            <p className="mt-2 text-body-lg text-white/70">Browse the full catalog and build with confidence.</p>
+            <h2 className="font-display text-headline-lg text-white">{t('home.ctaHeading')}</h2>
+            <p className="mt-2 text-body-lg text-white/70">{t('home.ctaSub')}</p>
           </div>
           <Link
             to="/shop"
             className="shrink-0 rounded bg-accent px-8 py-4 text-label-lg font-semibold text-accent-fg transition-transform hover:scale-105"
           >
-            Shop now
+            {t('common.shopNow')}
           </Link>
         </Container>
       </section>

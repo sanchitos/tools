@@ -3,6 +3,7 @@ import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.js';
 import { ApiError } from '../../lib/api.js';
 import { Button } from '../../components/ui/Button.js';
+import { Logo } from '../../components/Logo.js';
 
 /** Admin login — utilitarian, uses the Stitch tokens. */
 export default function AdminLoginPage() {
@@ -32,9 +33,8 @@ export default function AdminLoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface-inverse px-4">
       <div className="w-full max-w-sm rounded-lg border border-border bg-surface p-8 shadow-pop">
-        <div className="mb-6 flex items-baseline gap-1 font-display text-headline-md font-bold">
-          <span className="text-primary">TOOLS</span>
-          <span className="text-accent">JAMAICA</span>
+        <div className="mb-6 flex items-center">
+          <Logo />
         </div>
         <h1 className="text-headline-md text-ink">Admin sign in</h1>
         <p className="mt-1 text-body-md text-ink-muted">Manage the product catalog.</p>

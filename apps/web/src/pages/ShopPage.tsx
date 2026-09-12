@@ -13,23 +13,24 @@ import {
 } from '../components/ui/index.js';
 import { ProductCard } from '../components/ProductCard.js';
 import { ShopFilters } from '../components/ShopFilters.js';
+import { useT } from '../i18n/LocaleContext.js';
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
 
-const SORT_OPTIONS = [
-  { value: 'featured', label: 'Featured' },
-  { value: 'price-asc', label: 'Price: Low to High' },
-  { value: 'price-desc', label: 'Price: High to Low' },
-  { value: 'name', label: 'Name A–Z' },
-];
-
-// Only offered while a search is active — relevance ranking has no meaning
-// against the plain browse listing (see catalog/service.ts listProductsPlain).
-const RELEVANCE_OPTION = { value: 'relevance', label: 'Relevance' };
-
 export default function ShopPage() {
+  const t = useT();
   const [sp, setSp] = useSearchParams();
+
+  const sortOptions = [
+    { value: 'featured', label: t('shop.sort.featured') },
+    { value: 'price-asc', label: t('shop.sort.priceAsc') },
+    { value: 'price-desc', label: t('shop.sort.priceDesc') },
+    { value: 'name', label: t('shop.sort.name') },
+  ];
+  // Only offered while a search is active — relevance ranking has no meaning
+  // against the plain browse listing (see catalog/service.ts listProductsPlain).
+  const relevanceOption = { value: 'relevance', label: t('shop.sort.relevance') };
   const categories = useAsync(() => api.categories(), []);
   const brands = useAsync(() => api.brands(), []);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -131,12 +132,12 @@ export default function ShopPage() {
     <Container className="py-6">
       <Breadcrumbs
         items={[
-          { label: 'Home', to: '/' },
-          { label: 'Shop', to: activeCategoryLabel ? '/shop' : undefined },
+          { label: t('common.home'), to: '/' },
+          { label: t('common.shop'), to: activeCategoryLabel ? '/shop' : undefined },
           ...(activeCategoryLabel ? [{ label: activeCategoryLabel }] : []),
         ]}
       />
-      <h1 className="mt-2 font-display text-headline-lg text-primary">Shop</h1>
+      <h1 className="mt-2 font-display text-headline-lg text-primary">{t('shop.title')}</h1>
 
       {/* Department chip rail — top-level only; selecting one includes its subcategories (server-expanded). */}
       {topLevelCategories.length > 0 && (
@@ -165,15 +166,17 @@ export default function ShopPage() {
       <div className="mt-6">
         <div className="hidden items-center justify-between lg:flex">
           <p className="text-body-sm text-ink-muted">
-            {total} {total === 1 ? 'product' : 'products'}
+            {t(total === 1 ? 'shop.count_one' : 'shop.count_other', { count: total })}
           </p>
           <div className="flex items-center gap-2">
-            <span className="text-label-sm font-semibold uppercase tracking-wide text-ink-muted">Sort by</span>
+            <span className="text-label-sm font-semibold uppercase tracking-wide text-ink-muted">
+              {t('shop.sortBy')}
+            </span>
             <div className="w-52">
               <Select
-                ariaLabel="Sort products"
+                ariaLabel={t('shop.sortAria')}
                 value={sort}
-                options={q ? [RELEVANCE_OPTION, ...SORT_OPTIONS] : SORT_OPTIONS}
+                options={q ? [relevanceOption, ...sortOptions] : sortOptions}
                 onChange={(v) => update((next) => next.set('sort', v))}
               />
             </div>
@@ -183,9 +186,9 @@ export default function ShopPage() {
         <div className="lg:hidden">
           <div className="grid grid-cols-2 gap-2">
             <Select
-              ariaLabel="Sort products"
+              ariaLabel={t('shop.sortAria')}
               value={sort}
-              options={q ? [RELEVANCE_OPTION, ...SORT_OPTIONS] : SORT_OPTIONS}
+              options={q ? [relevanceOption, ...sortOptions] : sortOptions}
               onChange={(v) => update((next) => next.set('sort', v))}
             />
             <button
@@ -193,7 +196,7 @@ export default function ShopPage() {
               onClick={() => setFiltersOpen(true)}
               className="relative flex items-center justify-center gap-2 rounded border border-border bg-surface px-3 py-2 text-body-sm text-ink"
             >
-              Filters
+              {t('shop.filters')}
               {activeFilters > 0 && (
                 <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1 text-label-xs text-accent-fg">
                   {activeFilters}
@@ -202,7 +205,7 @@ export default function ShopPage() {
             </button>
           </div>
           <p className="mt-3 text-center text-body-sm text-ink-muted">
-            {total} {total === 1 ? 'product' : 'products'}
+            {t(total === 1 ? 'shop.count_one' : 'shop.count_other', { count: total })}
           </p>
         </div>
       </div>
@@ -211,10 +214,10 @@ export default function ShopPage() {
         {/* Desktop filter rail */}
         <aside className="hidden lg:block">
           <div className="flex items-center justify-between px-0 pb-2">
-            <h2 className="text-label-lg font-semibold uppercase tracking-wide text-primary">Filters</h2>
+            <h2 className="text-label-lg font-semibold uppercase tracking-wide text-primary">{t('shop.filters')}</h2>
             {activeFilters > 0 && (
               <button onClick={clearAll} className="text-label-sm text-accent hover:underline">
-                Clear all
+                {t('shop.clearAll')}
               </button>
             )}
           </div>
@@ -225,7 +228,8 @@ export default function ShopPage() {
         <Drawer
           open={filtersOpen}
           side="right"
-          title="Filters"
+          title={t('shop.filters')}
+          closeLabel={t('common.close')}
           onClose={() => setFiltersOpen(false)}
           footer={
             <div className="flex gap-3">
@@ -233,13 +237,13 @@ export default function ShopPage() {
                 onClick={clearAll}
                 className="flex-1 rounded border-2 border-primary py-2.5 text-label-lg font-semibold text-primary"
               >
-                Clear all
+                {t('shop.clearAll')}
               </button>
               <button
                 onClick={() => setFiltersOpen(false)}
                 className="flex-1 rounded bg-primary py-2.5 text-label-lg font-semibold text-primary-fg"
               >
-                Apply
+                {t('shop.apply')}
               </button>
             </div>
           }
@@ -259,7 +263,7 @@ export default function ShopPage() {
             <p className="text-error">{products.error}</p>
           ) : total === 0 ? (
             <div className="rounded-card border border-dashed border-border py-20 text-center">
-              <p className="text-body-lg text-ink-muted">No products match your filters.</p>
+              <p className="text-body-lg text-ink-muted">{t('shop.noResults')}</p>
             </div>
           ) : (
             <>
@@ -275,6 +279,13 @@ export default function ShopPage() {
                     page={page}
                     pageCount={totalPages}
                     onChange={(p) => update((next) => next.set('page', String(p)), false)}
+                    labels={{
+                      nav: t('pagination.nav'),
+                      first: t('pagination.first'),
+                      previous: t('pagination.previous'),
+                      next: t('pagination.next'),
+                      last: t('pagination.last'),
+                    }}
                   />
                 </div>
               )}

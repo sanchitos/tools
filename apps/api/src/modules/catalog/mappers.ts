@@ -16,11 +16,21 @@ import type {
   ProductSpecRow,
 } from '../../types/db.js';
 import { resolvePrice } from '../../lib/pricing.js';
+import { DEFAULT_LOCALE, pick, pickNullable, type Locale } from '../../lib/locale.js';
+
+/*
+ * Locale is a TRAILING, DEFAULTED parameter on every mapper that resolves an
+ * `_es` column — never an ambient/AsyncLocalStorage value. admin/mappers.ts
+ * calls toProductDetailDTO / toProductSummaryDTO directly, so an ambient locale
+ * would flow straight into the admin DTOs and the product editor would then
+ * save Spanish text over the English columns. "Admin gets English" is enforced
+ * here simply by not passing an argument. Do not "simplify" this away.
+ */
 
 /** Product row with the embedded relations we select in service.ts. */
 export interface ProductWithRelations extends ProductRow {
   brand: BrandRow | null;
-  category: Pick<CategoryRow, 'id' | 'slug' | 'label'> | null;
+  category: Pick<CategoryRow, 'id' | 'slug' | 'label' | 'label_es'> | null;
   images: ProductImageRow[] | null;
 }
 
@@ -33,11 +43,15 @@ export function toBrandDTO(row: BrandRow): BrandDTO {
   return { id: row.id, name: row.name, slug: row.slug, logoUrl: row.logo_url };
 }
 
-export function toCategoryDTO(row: CategoryRow, productCount?: number): CategoryDTO {
+export function toCategoryDTO(
+  row: CategoryRow,
+  productCount?: number,
+  locale: Locale = DEFAULT_LOCALE,
+): CategoryDTO {
   return {
     id: row.id,
     slug: row.slug,
-    label: row.label,
+    label: pick(locale, row.label, row.label_es),
     imageUrl: row.image_url,
     parentId: row.parent_id,
     ...(productCount !== undefined ? { productCount } : {}),
@@ -62,15 +76,18 @@ function pickPrimary(images: ProductImageRow[]): ProductImageRow | null {
 }
 
 /** Compact DTO for lists/grids. Admin-only fields (is_published, sort_order…) omitted. */
-export function toProductSummaryDTO(p: ProductWithRelations): ProductSummaryDTO {
+export function toProductSummaryDTO(
+  p: ProductWithRelations,
+  locale: Locale = DEFAULT_LOCALE,
+): ProductSummaryDTO {
   const images = p.images ?? [];
   const primary = pickPrimary(images);
   return {
     id: p.id,
     slug: p.slug,
-    name: p.name,
+    name: pick(locale, p.name, p.name_es),
     sku: p.sku,
-    shortDescription: p.short_description,
+    shortDescription: pickNullable(locale, p.short_description, p.short_description_es),
     price: resolvePrice(p),
     currency: p.currency,
     stock: p.stock,
@@ -79,34 +96,47 @@ export function toProductSummaryDTO(p: ProductWithRelations): ProductSummaryDTO 
     reviewCount: p.review_count,
     brand: p.brand ? toBrandDTO(p.brand) : null,
     category: p.category
-      ? { id: p.category.id, slug: p.category.slug, label: p.category.label }
+      ? {
+          id: p.category.id,
+          slug: p.category.slug,
+          label: pick(locale, p.category.label, p.category.label_es),
+        }
       : null,
     primaryImage: primary ? toImageDTO(primary) : null,
   };
 }
 
-function toSpecDTO(row: ProductSpecRow): ProductSpecDTO {
-  return { id: row.id, label: row.label, value: row.value, sortOrder: row.sort_order };
+function toSpecDTO(row: ProductSpecRow, locale: Locale = DEFAULT_LOCALE): ProductSpecDTO {
+  return {
+    id: row.id,
+    label: pick(locale, row.label, row.label_es),
+    value: pick(locale, row.value, row.value_es),
+    sortOrder: row.sort_order,
+  };
 }
 
-function toHighlightDTO(row: ProductHighlightRow): ProductHighlightDTO {
-  return { id: row.id, text: row.text, sortOrder: row.sort_order };
+function toHighlightDTO(
+  row: ProductHighlightRow,
+  locale: Locale = DEFAULT_LOCALE,
+): ProductHighlightDTO {
+  return { id: row.id, text: pick(locale, row.text, row.text_es), sortOrder: row.sort_order };
 }
 
 /** Full DTO for the product detail page. */
 export function toProductDetailDTO(
   p: ProductDetailRelations,
   related: ProductSummaryDTO[],
+  locale: Locale = DEFAULT_LOCALE,
 ): ProductDetailDTO {
   const images = [...(p.images ?? [])].sort(bySort);
   const specs = [...(p.specs ?? [])].sort(bySort);
   const highlights = [...(p.highlights ?? [])].sort(bySort);
   return {
-    ...toProductSummaryDTO(p), // sku already included here
-    description: p.description,
+    ...toProductSummaryDTO(p, locale), // sku already included here
+    description: pickNullable(locale, p.description, p.description_es),
     images: images.map(toImageDTO),
-    specs: specs.map(toSpecDTO),
-    highlights: highlights.map(toHighlightDTO),
+    specs: specs.map((row) => toSpecDTO(row, locale)),
+    highlights: highlights.map((row) => toHighlightDTO(row, locale)),
     related,
   };
 }

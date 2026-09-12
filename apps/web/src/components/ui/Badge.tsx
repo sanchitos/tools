@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react';
 
-type Tone = 'accent' | 'navy' | 'neutral' | 'success' | 'error';
+type Tone = 'accent' | 'navy' | 'neutral' | 'success' | 'warning' | 'error';
 
 const tones: Record<Tone, string> = {
   accent: 'bg-accent text-accent-fg',
   navy: 'bg-primary text-primary-fg',
   neutral: 'bg-surface-strong text-primary',
   success: 'bg-success text-success-fg',
+  warning: 'bg-warning text-warning-fg',
   error: 'bg-error text-error-fg',
 };
 

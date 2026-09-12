@@ -9,6 +9,7 @@ import { db } from '../../lib/supabase.js';
 import { AppError } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
 import type { BrandRow, CategoryRow } from '../../types/db.js';
+import { DEFAULT_LOCALE, type Locale } from '../../lib/locale.js';
 import type { ProductListParams } from './schema.js';
 import {
   toBrandDTO,
@@ -21,11 +22,12 @@ import {
 
 /** Columns + embedded relations for a product summary/detail row. */
 const PRODUCT_SELECT = `
-  id, slug, name, brand_id, category_id, short_description, description,
+  id, slug, name, name_es, brand_id, category_id,
+  short_description, short_description_es, description, description_es,
   price, currency, stock, sku, featured, is_published, rating, review_count,
   created_at, updated_at,
-  brand:brands ( id, name, slug, logo_url ),
-  category:categories ( id, slug, label ),
+  brand:brands ( id, name, slug, logo_url, sort_order, is_featured, created_at, updated_at ),
+  category:categories ( id, slug, label, label_es ),
   images:product_images ( id, product_id, url, is_primary, alt_text, sort_order, created_at )
 `;
 
@@ -115,7 +117,9 @@ async function listProductsPlain(
   const { data, error, count } = await query;
   if (error) fail('Failed to list products', error.message);
 
-  const items = (data as unknown as ProductWithRelations[]).map(toProductSummaryDTO);
+  const items = (data as unknown as ProductWithRelations[]).map((r) =>
+    toProductSummaryDTO(r, params.lang),
+  );
   return { items, total: count ?? items.length, page: params.page, pageSize: params.pageSize };
 }
 
@@ -151,6 +155,9 @@ async function searchProducts(
     p_sort: sort,
     p_limit: params.pageSize,
     p_offset: (params.page - 1) * params.pageSize,
+    // Named args: a new defaulted parameter is backward-compatible — but only
+    // because 0009 DROPped the old 9-arg overload rather than replacing it.
+    p_lang: params.lang,
   });
   if (error) fail('Failed to search products', error.message);
 
@@ -178,7 +185,7 @@ async function searchProducts(
   const items = ids
     .map((id) => byId.get(id))
     .filter((r): r is ProductWithRelations => r !== undefined)
-    .map(toProductSummaryDTO);
+    .map((r) => toProductSummaryDTO(r, params.lang));
 
   return {
     items,
@@ -199,7 +206,10 @@ export async function listProducts(
   return q ? searchProducts(params, q, sort) : listProductsPlain(params, sort);
 }
 
-export async function getFeatured(limit = 8): Promise<ProductSummaryDTO[]> {
+export async function getFeatured(
+  locale: Locale = DEFAULT_LOCALE,
+  limit = 8,
+): Promise<ProductSummaryDTO[]> {
   const { data, error } = await db
     .from('products')
     .select(PRODUCT_SELECT)
@@ -208,16 +218,19 @@ export async function getFeatured(limit = 8): Promise<ProductSummaryDTO[]> {
     .order('created_at', { ascending: false })
     .limit(limit);
   if (error) fail('Failed to load featured products', error.message);
-  return (data as unknown as ProductWithRelations[]).map(toProductSummaryDTO);
+  return (data as unknown as ProductWithRelations[]).map((r) => toProductSummaryDTO(r, locale));
 }
 
-export async function getProductBySlug(slug: string): Promise<ProductDetailDTO> {
+export async function getProductBySlug(
+  slug: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<ProductDetailDTO> {
   const { data, error } = await db
     .from('products')
     .select(
       `${PRODUCT_SELECT},
-       specs:product_specs ( id, product_id, label, value, sort_order ),
-       highlights:product_highlights ( id, product_id, text, sort_order )`,
+       specs:product_specs ( id, product_id, label, label_es, value, value_es, sort_order ),
+       highlights:product_highlights ( id, product_id, text, text_es, sort_order )`,
     )
     .eq('is_published', true)
     .eq('slug', slug)
@@ -238,13 +251,15 @@ export async function getProductBySlug(slug: string): Promise<ProductDetailDTO> 
       .neq('id', product.id)
       .limit(4);
     if (relErr) fail('Failed to load related products', relErr.message);
-    related = (rel as unknown as ProductWithRelations[]).map(toProductSummaryDTO);
+    related = (rel as unknown as ProductWithRelations[]).map((r) =>
+      toProductSummaryDTO(r, locale),
+    );
   }
 
-  return toProductDetailDTO(product, related);
+  return toProductDetailDTO(product, related, locale);
 }
 
-export async function listCategories(): Promise<CategoryDTO[]> {
+export async function listCategories(locale: Locale = DEFAULT_LOCALE): Promise<CategoryDTO[]> {
   const { data, error } = await db
     .from('categories')
     .select('*')
@@ -277,7 +292,7 @@ export async function listCategories(): Promise<CategoryDTO[]> {
     }
   }
 
-  return rows.map((c) => toCategoryDTO(c, rolledUp.get(c.id) ?? 0));
+  return rows.map((c) => toCategoryDTO(c, rolledUp.get(c.id) ?? 0, locale));
 }
 
 export async function listBrands(): Promise<BrandDTO[]> {

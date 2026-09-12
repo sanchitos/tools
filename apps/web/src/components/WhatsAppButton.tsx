@@ -1,18 +1,21 @@
-import { WHATSAPP_URL } from '../lib/contact.js';
+import { whatsappUrl } from '../lib/contact.js';
+import { useT } from '../i18n/LocaleContext.js';
 
 /** Floating WhatsApp click-to-chat bubble (storefront only). */
 export function WhatsAppButton() {
+  const t = useT();
+
   return (
     <a
-      href={WHATSAPP_URL}
+      href={whatsappUrl(t('whatsapp.defaultMessage'))}
       target="_blank"
       rel="noopener noreferrer"
-      aria-label="Chat with us on WhatsApp"
+      aria-label={t('whatsapp.fabAria')}
       className="whatsapp-fab group fixed bottom-6 right-6 z-50 flex items-center gap-2 transition-[bottom] duration-200"
     >
       {/* Label expands on hover/focus (hidden on touch, where there's no hover). */}
       <span className="pointer-events-none max-w-0 overflow-hidden whitespace-nowrap rounded-full bg-primary py-2.5 text-label-lg font-semibold text-primary-fg opacity-0 shadow-pop transition-all duration-300 group-hover:max-w-[180px] group-hover:px-4 group-hover:opacity-100 group-focus-visible:max-w-[180px] group-focus-visible:px-4 group-focus-visible:opacity-100">
-        Chat with us
+        {t('whatsapp.fabLabel')}
       </span>
       <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#25D366] text-white shadow-pop transition-transform group-hover:scale-110 group-focus-visible:scale-110">
         <svg className="h-8 w-8" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">

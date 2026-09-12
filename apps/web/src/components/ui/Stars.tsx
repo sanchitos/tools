@@ -5,16 +5,19 @@ export function Stars({
   rating,
   count,
   size = 'md',
+  ariaLabel,
 }: {
   rating: number;
   count?: number;
   size?: 'sm' | 'md';
+  /** English default; public callers pass t(...). ui/* never imports i18n/. */
+  ariaLabel?: string;
 }) {
   if (rating <= 0) return null;
   const sizeClass = size === 'sm' ? 'text-body-sm' : 'text-body-lg';
 
   return (
-    <div className="flex items-center gap-1 text-accent" aria-label={`Rated ${rating} out of 5`}>
+    <div className="flex items-center gap-1 text-accent" aria-label={ariaLabel ?? `Rated ${rating} out of 5`}>
       <span className={`flex ${sizeClass}`}>
         {Array.from({ length: 5 }, (_, i) => {
           const diff = rating - i;

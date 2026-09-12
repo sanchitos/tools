@@ -79,6 +79,83 @@ describe('admin API', () => {
     expect(res.status).toBe(403);
   });
 
+  describe('new homepage / locations routes are role-gated like the rest', () => {
+    for (const path of ['/api/v1/admin/home', '/api/v1/admin/locations']) {
+      it(`rejects an anonymous GET ${path} (401)`, async () => {
+        const res = await request(app).get(path);
+        expect(res.status).toBe(401);
+      });
+
+      it(`rejects a non-admin GET ${path} (403)`, async () => {
+        queueResult('profiles', profile('customer'));
+        const res = await request(app).get(path).set('Cookie', sessionCookie());
+        expect(res.status).toBe(403);
+      });
+    }
+
+    it('rejects an anonymous brand-logo upload (403 — CSRF guards mutations first)', async () => {
+      const res = await request(app).post(
+        '/api/v1/admin/brands/00000000-0000-0000-0000-000000000000/logo',
+      );
+      expect(res.status).toBe(403);
+    });
+
+    it('rejects a non-admin brand-logo upload that clears CSRF (403)', async () => {
+      queueResult('profiles', profile('customer'));
+      const res = await request(app)
+        .post('/api/v1/admin/brands/00000000-0000-0000-0000-000000000000/logo')
+        .set('Cookie', sessionCookieWithCsrf())
+        .set('x-csrf-token', 'test-csrf-token');
+      expect(res.status).toBe(403);
+      expect(res.body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('GET /admin/home returns the hero with its raw _es fields for editing', async () => {
+      queueResult('profiles', profile('admin'));
+      queueResult('home_hero', {
+        data: {
+          id: true, image_url: null,
+          eyebrow: 'Eyebrow', eyebrow_es: null,
+          headline: 'Headline', headline_es: 'Titular',
+          subcopy: null, subcopy_es: null,
+          cta_label: null, cta_label_es: null,
+          cta_href: '/shop', created_at: '', updated_at: '',
+        },
+        error: null,
+      });
+      queueResult('home_tiles', { data: [], error: null });
+
+      const res = await request(app).get('/api/v1/admin/home').set('Cookie', sessionCookie());
+      expect(res.status).toBe(200);
+      // The admin DTO is ALWAYS English plus the raw _es fields: a localized
+      // admin DTO would let the editor save Spanish over the English columns.
+      expect(res.body.hero.headline).toBe('Headline');
+      expect(res.body.hero.headlineEs).toBe('Titular');
+    });
+
+    it('admin DTOs stay English even when the request carries ?lang=es', async () => {
+      queueResult('profiles', profile('admin'));
+      queueResult('home_hero', {
+        data: {
+          id: true, image_url: null,
+          eyebrow: null, eyebrow_es: null,
+          headline: 'Headline', headline_es: 'Titular',
+          subcopy: null, subcopy_es: null,
+          cta_label: null, cta_label_es: null,
+          cta_href: '/shop', created_at: '', updated_at: '',
+        },
+        error: null,
+      });
+      queueResult('home_tiles', { data: [], error: null });
+
+      const res = await request(app)
+        .get('/api/v1/admin/home?lang=es')
+        .set('Cookie', sessionCookie());
+      expect(res.status).toBe(200);
+      expect(res.body.hero.headline).toBe('Headline');
+    });
+  });
+
   describe('category hierarchy — depth enforcement (400 BadRequest)', () => {
     const PARENT_ID = '11111111-1111-1111-1111-111111111111';
     const SELF_ID = '22222222-2222-2222-2222-222222222222';

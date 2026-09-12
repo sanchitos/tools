@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { ProductImageDTO } from '@tools-jamaica/shared';
 import { api, ApiError } from '../../lib/api.js';
 import { useAsync } from '../../lib/useAsync.js';
+import { BilingualField, esOrNull } from '../../components/admin/BilingualField.js';
 import {
   Badge,
   Button,
@@ -12,16 +13,19 @@ import {
   Select,
 } from '../../components/ui/index.js';
 
-interface SpecRow { label: string; value: string }
-interface HighlightRow { text: string }
+interface SpecRow { label: string; labelEs: string; value: string; valueEs: string }
+interface HighlightRow { text: string; textEs: string }
 
 interface FormState {
   name: string;
+  nameEs: string;
   slug: string;
   categoryId: string;
   brandId: string;
   shortDescription: string;
+  shortDescriptionEs: string;
   description: string;
+  descriptionEs: string;
   price: string;
   stock: string;
   sku: string;
@@ -32,7 +36,8 @@ interface FormState {
 }
 
 const EMPTY: FormState = {
-  name: '', slug: '', categoryId: '', brandId: '', shortDescription: '', description: '',
+  name: '', nameEs: '', slug: '', categoryId: '', brandId: '',
+  shortDescription: '', shortDescriptionEs: '', description: '', descriptionEs: '',
   price: '', stock: '0', sku: '', featured: false, isPublished: true, specs: [], highlights: [],
 };
 
@@ -54,12 +59,19 @@ export default function ProductEditorPage() {
     const p = product.data;
     if (!p) return;
     setForm({
-      name: p.name, slug: p.slug, categoryId: p.categoryId ?? '', brandId: p.brandId ?? '',
-      shortDescription: p.shortDescription ?? '', description: p.description ?? '',
+      name: p.name, nameEs: p.nameEs ?? '', slug: p.slug,
+      categoryId: p.categoryId ?? '', brandId: p.brandId ?? '',
+      shortDescription: p.shortDescription ?? '', shortDescriptionEs: p.shortDescriptionEs ?? '',
+      description: p.description ?? '', descriptionEs: p.descriptionEs ?? '',
       price: String(p.price), stock: String(p.stock), sku: p.sku ?? '',
       featured: p.featured, isPublished: p.isPublished,
-      specs: p.specs.map((s) => ({ label: s.label, value: s.value })),
-      highlights: p.highlights.map((h) => ({ text: h.text })),
+      specs: p.specs.map((s) => ({
+        label: s.label,
+        labelEs: s.labelEs ?? '',
+        value: s.value,
+        valueEs: s.valueEs ?? '',
+      })),
+      highlights: p.highlights.map((h) => ({ text: h.text, textEs: h.textEs ?? '' })),
     });
   }, [product.data]);
 
@@ -74,18 +86,33 @@ export default function ProductEditorPage() {
     setSaving(true);
     const payload = {
       name: form.name,
+      nameEs: esOrNull(form.nameEs),
       slug: form.slug || undefined,
       categoryId: form.categoryId,
       brandId: form.brandId || null,
       shortDescription: form.shortDescription || null,
+      shortDescriptionEs: esOrNull(form.shortDescriptionEs),
       description: form.description || null,
+      descriptionEs: esOrNull(form.descriptionEs),
       price: Number(form.price),
       stock: Number(form.stock),
       sku: form.sku || null,
       featured: form.featured,
       isPublished: form.isPublished,
-      specs: form.specs.filter((s) => s.label && s.value).map((s, i) => ({ ...s, sortOrder: i })),
-      highlights: form.highlights.filter((h) => h.text).map((h, i) => ({ ...h, sortOrder: i })),
+      // Blank `_es` -> null, matching the server's esText transform: an empty
+      // string is not a translation and would blank the field on the storefront.
+      specs: form.specs
+        .filter((s) => s.label && s.value)
+        .map((s, i) => ({
+          label: s.label,
+          labelEs: esOrNull(s.labelEs),
+          value: s.value,
+          valueEs: esOrNull(s.valueEs),
+          sortOrder: i,
+        })),
+      highlights: form.highlights
+        .filter((h) => h.text)
+        .map((h, i) => ({ text: h.text, textEs: esOrNull(h.textEs), sortOrder: i })),
     };
     try {
       if (isNew) {
@@ -127,9 +154,14 @@ export default function ProductEditorPage() {
 
       <form onSubmit={save} className="space-y-6">
         <Card title="Details">
-          <Field label="Name" required>
-            <input className={input} required value={form.name} onChange={(e) => set('name', e.target.value)} />
-          </Field>
+          <BilingualField
+            label="Name"
+            required
+            value={form.name}
+            onChange={(v) => set('name', v)}
+            valueEs={form.nameEs}
+            onChangeEs={(v) => set('nameEs', v)}
+          />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Slug (optional)">
               <input className={input} value={form.slug} placeholder="auto from name" onChange={(e) => set('slug', e.target.value)} />
@@ -154,12 +186,22 @@ export default function ProductEditorPage() {
               <input className={input} type="number" min="0" value={form.stock} onChange={(e) => set('stock', e.target.value)} />
             </Field>
           </div>
-          <Field label="Short description">
-            <input className={input} value={form.shortDescription} onChange={(e) => set('shortDescription', e.target.value)} />
-          </Field>
-          <Field label="Description">
-            <textarea className={`${input} min-h-28`} value={form.description} onChange={(e) => set('description', e.target.value)} />
-          </Field>
+          <BilingualField
+            label="Short description"
+            value={form.shortDescription}
+            onChange={(v) => set('shortDescription', v)}
+            valueEs={form.shortDescriptionEs}
+            onChangeEs={(v) => set('shortDescriptionEs', v)}
+          />
+          <BilingualField
+            label="Description"
+            textarea
+            rows={5}
+            value={form.description}
+            onChange={(v) => set('description', v)}
+            valueEs={form.descriptionEs}
+            onChangeEs={(v) => set('descriptionEs', v)}
+          />
           <div className="flex flex-wrap gap-6">
             <Toggle label="Featured" checked={form.featured} onChange={(v) => set('featured', v)} />
             <Toggle label="Published" checked={form.isPublished} onChange={(v) => set('isPublished', v)} />
@@ -169,15 +211,27 @@ export default function ProductEditorPage() {
         <Card title="Highlights">
           <RowEditor
             rows={form.highlights}
-            onAdd={() => set('highlights', [...form.highlights, { text: '' }])}
+            onAdd={() => set('highlights', [...form.highlights, { text: '', textEs: '' }])}
             onRemove={(i) => set('highlights', form.highlights.filter((_, x) => x !== i))}
             render={(row, i) => (
-              <input
-                className={input}
-                placeholder="Highlight"
-                value={row.text}
-                onChange={(e) => set('highlights', form.highlights.map((r, x) => (x === i ? { text: e.target.value } : r)))}
-              />
+              <div className="flex flex-1 flex-col gap-1.5">
+                <input
+                  className={input}
+                  placeholder="Highlight (EN)"
+                  value={row.text}
+                  onChange={(e) =>
+                    set('highlights', form.highlights.map((r, x) => (x === i ? { ...r, text: e.target.value } : r)))
+                  }
+                />
+                <input
+                  className={input}
+                  placeholder="Highlight (ES) — blank = same as English"
+                  value={row.textEs}
+                  onChange={(e) =>
+                    set('highlights', form.highlights.map((r, x) => (x === i ? { ...r, textEs: e.target.value } : r)))
+                  }
+                />
+              </div>
             )}
             addLabel="+ Add highlight"
           />
@@ -186,22 +240,38 @@ export default function ProductEditorPage() {
         <Card title="Specifications">
           <RowEditor
             rows={form.specs}
-            onAdd={() => set('specs', [...form.specs, { label: '', value: '' }])}
+            onAdd={() => set('specs', [...form.specs, { label: '', labelEs: '', value: '', valueEs: '' }])}
             onRemove={(i) => set('specs', form.specs.filter((_, x) => x !== i))}
             render={(row, i) => (
-              <div className="flex flex-1 gap-2">
-                <input
-                  className={input}
-                  placeholder="Label"
-                  value={row.label}
-                  onChange={(e) => set('specs', form.specs.map((r, x) => (x === i ? { ...r, label: e.target.value } : r)))}
-                />
-                <input
-                  className={input}
-                  placeholder="Value"
-                  value={row.value}
-                  onChange={(e) => set('specs', form.specs.map((r, x) => (x === i ? { ...r, value: e.target.value } : r)))}
-                />
+              <div className="flex flex-1 flex-col gap-1.5">
+                <div className="flex gap-2">
+                  <input
+                    className={input}
+                    placeholder="Label (EN)"
+                    value={row.label}
+                    onChange={(e) => set('specs', form.specs.map((r, x) => (x === i ? { ...r, label: e.target.value } : r)))}
+                  />
+                  <input
+                    className={input}
+                    placeholder="Value (EN)"
+                    value={row.value}
+                    onChange={(e) => set('specs', form.specs.map((r, x) => (x === i ? { ...r, value: e.target.value } : r)))}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    className={input}
+                    placeholder="Label (ES)"
+                    value={row.labelEs}
+                    onChange={(e) => set('specs', form.specs.map((r, x) => (x === i ? { ...r, labelEs: e.target.value } : r)))}
+                  />
+                  <input
+                    className={input}
+                    placeholder="Value (ES)"
+                    value={row.valueEs}
+                    onChange={(e) => set('specs', form.specs.map((r, x) => (x === i ? { ...r, valueEs: e.target.value } : r)))}
+                  />
+                </div>
               </div>
             )}
             addLabel="+ Add spec"

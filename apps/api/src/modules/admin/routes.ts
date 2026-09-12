@@ -9,13 +9,19 @@ import {
   brandUpdateSchema,
   categoryCreateSchema,
   categoryUpdateSchema,
+  heroUpdateSchema,
   idParamSchema,
   imageParamsSchema,
   imageUploadMetaSchema,
+  locationCreateSchema,
+  locationUpdateSchema,
+  orphanCleanupQuerySchema,
   productCreateSchema,
   productListQuerySchema,
   productUpdateSchema,
   reorderSchema,
+  tileCreateSchema,
+  tileUpdateSchema,
   updateOrderStatusSchema,
 } from './schema.js';
 import * as svc from './service.js';
@@ -24,6 +30,16 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 8 * 1024 * 1024 }, // 8 MB
 });
+
+/** Shared multipart guard — every upload route below applies the same checks. */
+function requireImage(req: { file?: Express.Multer.File }): Express.Multer.File {
+  const file = req.file;
+  if (!file) throw AppError.BadRequest('No file uploaded (field "file")');
+  if (!file.mimetype.startsWith('image/')) {
+    throw AppError.BadRequest('Only image uploads are allowed');
+  }
+  return file;
+}
 
 /**
  * Admin back-office API. The whole router is gated by requireAuth +
@@ -92,11 +108,7 @@ export function adminRouter(): Router {
     upload.single('file'),
     ah(async (req, res) => {
       const { id } = idParamSchema.parse(req.params);
-      const file = req.file;
-      if (!file) throw AppError.BadRequest('No file uploaded (field "file")');
-      if (!file.mimetype.startsWith('image/')) {
-        throw AppError.BadRequest('Only image uploads are allowed');
-      }
+      const file = requireImage(req);
       const meta = imageUploadMetaSchema.parse(req.body ?? {});
       res.status(201).json(await svc.addProductImage(id, file, meta));
     }),
@@ -187,11 +199,123 @@ export function adminRouter(): Router {
     }),
   );
 
+  router.post(
+    '/brands/:id/logo',
+    upload.single('file'),
+    ah(async (req, res) => {
+      const { id } = idParamSchema.parse(req.params);
+      res.json(await svc.setBrandLogo(id, requireImage(req)));
+    }),
+  );
+
+  // --- Homepage ------------------------------------------------------------
+  router.get(
+    '/home',
+    ah(async (_req, res) => {
+      res.json(await svc.getAdminHomeContent());
+    }),
+  );
+
+  router.patch(
+    '/home/hero',
+    validate({ body: heroUpdateSchema }),
+    ah(async (req, res) => {
+      res.json(await svc.updateHero(req.body));
+    }),
+  );
+
+  router.post(
+    '/home/hero/image',
+    upload.single('file'),
+    ah(async (req, res) => {
+      res.json(await svc.setHeroImage(requireImage(req)));
+    }),
+  );
+
+  router.post(
+    '/home/tiles',
+    validate({ body: tileCreateSchema }),
+    ah(async (req, res) => {
+      res.status(201).json(await svc.createTile(req.body));
+    }),
+  );
+
+  router.patch(
+    '/home/tiles/:id',
+    validate({ body: tileUpdateSchema }),
+    ah(async (req, res) => {
+      const { id } = idParamSchema.parse(req.params);
+      res.json(await svc.updateTile(id, req.body));
+    }),
+  );
+
+  router.delete(
+    '/home/tiles/:id',
+    ah(async (req, res) => {
+      const { id } = idParamSchema.parse(req.params);
+      await svc.deleteTile(id);
+      res.status(204).end();
+    }),
+  );
+
+  router.post(
+    '/home/tiles/:id/image',
+    upload.single('file'),
+    ah(async (req, res) => {
+      const { id } = idParamSchema.parse(req.params);
+      res.json(await svc.setTileImage(id, requireImage(req)));
+    }),
+  );
+
+  // --- Locations -----------------------------------------------------------
+  router.get(
+    '/locations',
+    ah(async (_req, res) => {
+      res.json(await svc.listAdminLocations());
+    }),
+  );
+
+  router.post(
+    '/locations',
+    validate({ body: locationCreateSchema }),
+    ah(async (req, res) => {
+      res.status(201).json(await svc.createLocation(req.body));
+    }),
+  );
+
+  router.patch(
+    '/locations/:id',
+    validate({ body: locationUpdateSchema }),
+    ah(async (req, res) => {
+      const { id } = idParamSchema.parse(req.params);
+      res.json(await svc.updateLocation(id, req.body));
+    }),
+  );
+
+  router.delete(
+    '/locations/:id',
+    ah(async (req, res) => {
+      const { id } = idParamSchema.parse(req.params);
+      await svc.deleteLocation(id);
+      res.status(204).end();
+    }),
+  );
+
+  router.post(
+    '/locations/:id/image',
+    upload.single('file'),
+    ah(async (req, res) => {
+      const { id } = idParamSchema.parse(req.params);
+      res.json(await svc.setLocationImage(id, requireImage(req)));
+    }),
+  );
+
   // --- Storage maintenance -------------------------------------------------
   router.post(
     '/images/cleanup-orphans',
-    ah(async (_req, res) => {
-      res.json(await svc.cleanupOrphans());
+    ah(async (req, res) => {
+      const { dryRun } = orphanCleanupQuerySchema.parse(req.query);
+      res.json(await svc.cleanupOrphans(dryRun === true));
     }),
   );
 

@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 export interface SelectOption {
@@ -16,10 +16,16 @@ interface Props {
   ariaLabel?: string;
 }
 
+/** Max menu height, mirrored from the `max-h-64` class below (16rem = 256px). */
+const MENU_MAX_H = 256;
+const GAP = 4;
+
 /**
  * Shared Select — a fixed-positioned custom dropdown (never a native <select>,
  * which mispositions in device emulation and clips inside scroll containers).
- * Keyboard-navigable, closes on outside click / Esc / scroll.
+ * Keyboard-navigable; closes on outside click / Esc / when the trigger scrolls
+ * out of the viewport. Scrolling elsewhere *repositions* the menu rather than
+ * dismissing it, and scrolling the menu's own list does nothing.
  */
 export function Select({
   value,
@@ -33,15 +39,43 @@ export function Select({
   const [open, setOpen] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
   const [rect, setRect] = useState<DOMRect | null>(null);
+  /** True when there isn't room below the trigger and there is more room above. */
+  const [flipUp, setFlipUp] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLUListElement>(null);
+  const frameRef = useRef<number | null>(null);
   const listId = useId();
 
   const selected = options.find((o) => o.value === value);
 
+  /** Re-measure the trigger and decide which way the menu opens. */
+  const place = useCallback(() => {
+    const btn = btnRef.current;
+    if (!btn) return;
+    const r = btn.getBoundingClientRect();
+    setRect(r);
+
+    // The menu only exists once `rect` is set, so the very first call has no
+    // element to measure and assumes the max height. The layout effect below
+    // re-runs this once it has mounted, which is what stops a SHORT menu from
+    // flipping up needlessly.
+    const menuH = Math.min(menuRef.current?.scrollHeight ?? MENU_MAX_H, MENU_MAX_H);
+    const below = window.innerHeight - r.bottom;
+    setFlipUp(below < menuH + GAP && r.top > below);
+
+    // Only dismiss once the trigger has actually left the viewport.
+    if (r.bottom < 0 || r.top > window.innerHeight) setOpen(false);
+  }, []);
+
   useLayoutEffect(() => {
-    if (open && btnRef.current) setRect(btnRef.current.getBoundingClientRect());
-  }, [open]);
+    if (open) place();
+  }, [open, place]);
+
+  // Second pass, after the portalled menu exists: measures its real height.
+  const menuMounted = open && rect !== null;
+  useLayoutEffect(() => {
+    if (menuMounted) place();
+  }, [menuMounted, options.length, place]);
 
   useEffect(() => {
     if (!open) return;
@@ -53,16 +87,38 @@ export function Select({
         return;
       setOpen(false);
     };
-    const onScroll = () => setOpen(false);
+    const schedule = () => {
+      if (frameRef.current !== null) return;
+      frameRef.current = requestAnimationFrame(() => {
+        frameRef.current = null;
+        place();
+      });
+    };
+    const onScroll = (e: Event) => {
+      // Scrolling the menu's own option list must not move or close it.
+      if (menuRef.current?.contains(e.target as Node)) return;
+      schedule();
+    };
     document.addEventListener('mousedown', close);
     window.addEventListener('scroll', onScroll, true);
-    window.addEventListener('resize', onScroll);
+    window.addEventListener('resize', schedule);
     return () => {
       document.removeEventListener('mousedown', close);
       window.removeEventListener('scroll', onScroll, true);
-      window.removeEventListener('resize', onScroll);
+      window.removeEventListener('resize', schedule);
+      if (frameRef.current !== null) {
+        cancelAnimationFrame(frameRef.current);
+        frameRef.current = null;
+      }
     };
-  }, [open]);
+  }, [open, place]);
+
+  // Keep the keyboard-highlighted option visible past the menu's scroll fold.
+  useEffect(() => {
+    if (!open) return;
+    const el = menuRef.current?.children[activeIdx];
+    (el as HTMLElement | undefined)?.scrollIntoView({ block: 'nearest' });
+  }, [open, activeIdx]);
 
   const openMenu = () => {
     if (disabled) return;
@@ -125,7 +181,15 @@ export function Select({
             id={listId}
             role="listbox"
             className="fixed z-[100] max-h-64 overflow-auto rounded border border-border bg-surface py-1 shadow-pop"
-            style={{ top: rect.bottom + 4, left: rect.left, width: rect.width }}
+            style={
+              flipUp
+                ? {
+                    bottom: window.innerHeight - rect.top + GAP,
+                    left: rect.left,
+                    width: rect.width,
+                  }
+                : { top: rect.bottom + GAP, left: rect.left, width: rect.width }
+            }
           >
             {options.map((opt, i) => {
               const isSel = opt.value === value;

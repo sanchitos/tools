@@ -5,6 +5,8 @@ import { Icon } from './ui/Icon.js';
 import { Loader } from './ui/Loader.js';
 import { useAsync } from '../lib/useAsync.js';
 import { api } from '../lib/api.js';
+import { LocaleSwitcher } from './LocaleSwitcher.js';
+import { useT } from '../i18n/LocaleContext.js';
 
 /**
  * Left slide-in "all departments" drawer, fed by /categories. Categories are
@@ -12,19 +14,31 @@ import { api } from '../lib/api.js';
  * its subcategories indented beneath it.
  */
 export function DepartmentDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const t = useT();
   const { data: categories, loading, error } = useAsync(() => api.categories(), []);
   const topLevel = (categories ?? []).filter((c) => c.parentId === null);
   const childrenOf = (parentId: string) => (categories ?? []).filter((c) => c.parentId === parentId);
 
   return (
-    <Drawer open={open} side="left" title="All departments" onClose={onClose}>
+    <Drawer
+      open={open}
+      side="left"
+      title={t('departments.title')}
+      onClose={onClose}
+      closeLabel={t('common.close')}
+    >
       <nav className="flex flex-col">
+        {/* The tier-3 promo bar that holds the desktop switcher is lg-only. */}
+        <div className="flex justify-end border-b border-border px-4 py-3 lg:hidden">
+          <LocaleSwitcher />
+        </div>
+
         <Link
           to="/shop"
           onClick={onClose}
           className="flex items-center justify-between border-b border-border px-4 py-3 text-label-lg font-semibold text-primary hover:bg-surface-muted"
         >
-          Shop all products
+          {t('departments.shopAll')}
           <Icon name="chevronRight" className="text-ink-muted" />
         </Link>
 

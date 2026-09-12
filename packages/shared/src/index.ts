@@ -32,7 +32,12 @@ export interface ApiErrorBody {
 }
 
 export type Currency = 'JMD';
-export type Locale = 'en';
+/**
+ * Site languages. Content carries `_es` sibling columns; the API resolves the
+ * language server-side, so the *public* DTOs below stay single-valued strings.
+ * Only the admin DTOs expose the `*Es` fields, for editing.
+ */
+export type Locale = 'en' | 'es';
 
 // ---------------------------------------------------------------------------
 // Catalog — public DTOs (admin-only fields stripped)
@@ -149,21 +154,39 @@ export interface LoginRequest {
 // Admin DTOs (superset — includes fields stripped from public output)
 // ---------------------------------------------------------------------------
 
+export interface AdminProductSpecDTO extends ProductSpecDTO {
+  labelEs: string | null;
+  valueEs: string | null;
+}
+
+export interface AdminProductHighlightDTO extends ProductHighlightDTO {
+  textEs: string | null;
+}
+
 export interface AdminProductDTO extends ProductDetailDTO {
   isPublished: boolean;
   brandId: string | null;
   categoryId: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Spanish siblings — null means "not translated yet" (falls back to English). */
+  nameEs: string | null;
+  shortDescriptionEs: string | null;
+  descriptionEs: string | null;
+  specs: AdminProductSpecDTO[];
+  highlights: AdminProductHighlightDTO[];
 }
 
 export interface AdminCategoryDTO extends CategoryDTO {
   sortOrder: number;
   isPublished: boolean;
+  labelEs: string | null;
 }
 
 export interface AdminBrandDTO extends BrandDTO {
   sortOrder: number;
+  /** Shown in the homepage brand rail. Brand names themselves are never translated. */
+  isFeatured: boolean;
 }
 
 /** Lightweight row for the admin products list (no specs/highlights/related). */
@@ -173,12 +196,102 @@ export interface AdminProductListItem extends ProductSummaryDTO {
   categoryId: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Drives the "No ES" badge in the admin list. */
+  nameEs: string | null;
 }
 
 /** Result of the orphan-image sweep. */
 export interface OrphanCleanupResult {
+  /** Objects deleted — or, on a dry run, the number that would be. */
   deleted: number;
   paths: string[];
+  /** True when nothing was actually removed. */
+  dryRun: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Homepage content (admin-editable) + store locations
+// ---------------------------------------------------------------------------
+
+/**
+ * Where a tile renders on the homepage:
+ *  - `promo`   the two image cards beside the hero
+ *  - `service` the icon-only trust row
+ *  - `ticker`  the marquee strip (title only)
+ */
+export type HomeTileSlot = 'promo' | 'service' | 'ticker';
+
+export interface HomeHeroDTO {
+  imageUrl: string | null;
+  eyebrow: string | null;
+  headline: string;
+  subcopy: string | null;
+  ctaLabel: string | null;
+  ctaHref: string;
+}
+
+export interface HomeTileDTO {
+  id: string;
+  slot: HomeTileSlot;
+  title: string;
+  body: string | null;
+  /** An `IconName` from the web's ui/Icon; used when `imageUrl` is null. */
+  icon: string | null;
+  imageUrl: string | null;
+  href: string | null;
+  sortOrder: number;
+}
+
+export interface StoreLocationDTO {
+  id: string;
+  name: string;
+  /** Never translated — an address is an address. */
+  address: string;
+  phone: string | null;
+  hours: string | null;
+  mapUrl: string | null;
+  imageUrl: string | null;
+  sortOrder: number;
+}
+
+/**
+ * One payload for the whole homepage. The page already fired three requests
+ * before it was editable; splitting these per block would take it to eight.
+ */
+export interface HomeContentDTO {
+  hero: HomeHeroDTO | null;
+  promos: HomeTileDTO[];
+  services: HomeTileDTO[];
+  ticker: HomeTileDTO[];
+  featuredBrands: BrandDTO[];
+  locations: StoreLocationDTO[];
+}
+
+// --- Admin supersets (the `_es` editing surface + unpublished rows) ---------
+
+export interface AdminHomeHeroDTO extends HomeHeroDTO {
+  eyebrowEs: string | null;
+  headlineEs: string | null;
+  subcopyEs: string | null;
+  ctaLabelEs: string | null;
+}
+
+export interface AdminHomeTileDTO extends HomeTileDTO {
+  titleEs: string | null;
+  bodyEs: string | null;
+  isPublished: boolean;
+}
+
+export interface AdminStoreLocationDTO extends StoreLocationDTO {
+  nameEs: string | null;
+  hoursEs: string | null;
+  isPublished: boolean;
+}
+
+/** GET /admin/home — every tile, all slots, unpublished included. */
+export interface AdminHomeContentDTO {
+  hero: AdminHomeHeroDTO | null;
+  tiles: AdminHomeTileDTO[];
 }
 
 // ---------------------------------------------------------------------------

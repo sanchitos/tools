@@ -10,10 +10,17 @@ export function Rail({
   title,
   viewAllHref,
   children,
+  viewAllLabel = 'View all →',
+  scrollLeftLabel = 'Scroll left',
+  scrollRightLabel = 'Scroll right',
 }: {
   title?: string;
   viewAllHref?: string;
   children: ReactNode;
+  /** English defaults; public callers pass t(...). ui/* never imports i18n/. */
+  viewAllLabel?: string;
+  scrollLeftLabel?: string;
+  scrollRightLabel?: string;
 }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [atStart, setAtStart] = useState(true);
@@ -42,7 +49,7 @@ export function Rail({
               to={viewAllHref}
               className="absolute right-0 text-label-sm font-semibold text-primary hover:underline"
             >
-              View all →
+              {viewAllLabel}
             </Link>
           )}
         </div>
@@ -58,7 +65,7 @@ export function Rail({
         {!atStart && (
           <button
             type="button"
-            aria-label="Scroll left"
+            aria-label={scrollLeftLabel}
             onClick={() => scrollByPage(-1)}
             className="absolute left-0 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 rounded-full border border-border bg-surface p-2 shadow-sm hover:bg-surface-muted lg:flex"
           >
@@ -68,7 +75,7 @@ export function Rail({
         {!atEnd && (
           <button
             type="button"
-            aria-label="Scroll right"
+            aria-label={scrollRightLabel}
             onClick={() => scrollByPage(1)}
             className="absolute right-0 top-1/2 hidden translate-x-1/2 -translate-y-1/2 rounded-full border border-border bg-surface p-2 shadow-sm hover:bg-surface-muted lg:flex"
           >

@@ -63,10 +63,21 @@ Supabase SQL Editor, in order. Never run SQL against Supabase directly from code
 - **Never run SQL against Supabase.** Add the next numbered `.sql` in
   `apps/api/supabase/migrations/` and let the user run it manually in the SQL
   Editor. Make column adds idempotent (`add column if not exists`) when amending
-  a file the user may have already run. Latest migration: `0005_search`.
+  a file the user may have already run. Latest migration: `0010_homepage_content`.
 - **Add a DTO field:** edit `packages/shared/src/index.ts`, then the relevant
   `mappers.ts` and the row type in `apps/api/src/types/db.ts`. Shared is consumed
   from source, so no rebuild is needed.
+- **Add translatable content:** add a nullable `<col>_es` sibling column (never a
+  default — NULL means "not translated yet"), resolve it in the mapper with
+  `pick()`/`pickNullable()` from `apps/api/src/lib/locale.ts`, and expose the raw
+  `<col>Es` field on the **admin** DTO only. The locale parameter on every mapper
+  is trailing and defaulted on purpose: that is what keeps admin DTOs English so
+  the editor can't save Spanish over the English columns.
+- **Add a UI string:** add the key to `apps/web/src/i18n/en.ts` **and**
+  `es.ts` — `es.ts` is typed as `Dictionary`, so a missing key is a compile
+  error. Components in `apps/web/src/components/ui/*` must NEVER import from
+  `i18n/`: they are shared with the English admin back-office, so they take
+  English-defaulted label props and the *public* callers pass `t(...)`.
 
 ## UI conventions (web)
 

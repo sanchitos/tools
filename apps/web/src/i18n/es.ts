@@ -1,0 +1,200 @@
+import type { Dictionary } from './en.js';
+
+/**
+ * Spanish UI dictionary. Typed as `Dictionary`, so the compiler reports a
+ * missing key AND an unknown one — keep it in step with `en.ts`.
+ *
+ * Jamaican Spanish for a hardware storefront: neutral Latin American usage,
+ * "usted"-neutral phrasing, and no calques from the English where a trade term
+ * differs (ferretería, herramientas, envío a toda la isla).
+ */
+export const es: Dictionary = {
+  // --- Shared ---------------------------------------------------------------
+  'common.loading': 'Cargando…',
+  'common.home': 'Inicio',
+  'common.shop': 'Tienda',
+  'common.cart': 'Carrito',
+  'common.close': 'Cerrar',
+  'common.shopNow': 'Comprar ahora',
+  'common.shopProducts': 'Ver productos',
+  'common.viewAll': 'Ver todo →',
+  'common.scrollLeft': 'Desplazar a la izquierda',
+  'common.scrollRight': 'Desplazar a la derecha',
+  'common.inStock': 'En existencia',
+  'common.outOfStock': 'Agotado',
+  'common.addToCart': 'Agregar al carrito',
+  'common.soldBy': 'Vendido por {brand}',
+  'common.sku': 'SKU: {sku}',
+  'common.subtotal': 'Subtotal',
+  'common.orderSummary': 'Resumen del pedido',
+  'common.deliveryQuoted': 'El envío se cotiza por separado.',
+  'common.decreaseQuantity': 'Disminuir cantidad',
+  'common.increaseQuantity': 'Aumentar cantidad',
+  'common.whatsappUs': 'Escríbenos por WhatsApp',
+  'common.starsAria': 'Calificación de {rating} sobre 5',
+  'common.removeItem': 'Quitar {name}',
+
+  // --- Pagination -----------------------------------------------------------
+  'pagination.nav': 'Paginación',
+  'pagination.first': 'Primera página',
+  'pagination.previous': 'Página anterior',
+  'pagination.next': 'Página siguiente',
+  'pagination.last': 'Última página',
+
+  // --- Header ---------------------------------------------------------------
+  'nav.homeAria': 'Tools Jamaica — inicio',
+  'nav.tagline': 'Herramientas, ferretería y suministros — Jamaica',
+  'nav.allDepartments': 'Todos los departamentos',
+  'nav.searchPlaceholder': '¿Qué estás buscando?',
+  'nav.searchAria': 'Buscar productos',
+  'nav.searchSubmit': 'Buscar',
+  'nav.whatsapp': 'WhatsApp',
+  'nav.admin': 'Administración',
+  'nav.cartAria_one': 'Carrito, {count} artículo',
+  'nav.cartAria_other': 'Carrito, {count} artículos',
+  'nav.location': 'Kingston, Jamaica — envío a toda la isla',
+  'nav.featured': 'Destacados',
+  'nav.inStock': 'En existencia',
+  'nav.topBrands': 'Marcas principales',
+  'nav.shopAll': 'Ver todo',
+  'nav.language': 'Idioma',
+  'nav.english': 'English',
+  'nav.spanish': 'Español',
+
+  // --- Department drawer ----------------------------------------------------
+  'departments.title': 'Todos los departamentos',
+  'departments.shopAll': 'Ver todos los productos',
+
+  // --- Footer ---------------------------------------------------------------
+  'footer.questions': '¿Preguntas? Respondemos por WhatsApp.',
+  'footer.shop': 'Tienda',
+  'footer.allProducts': 'Todos los productos',
+  'footer.featured': 'Destacados',
+  'footer.inStock': 'En existencia',
+  'footer.departments': 'Departamentos',
+  'footer.browseAll': 'Ver todo',
+  'footer.company': 'Empresa',
+  'footer.companyBlurb':
+    'Tools Jamaica suministra ferretería y productos para el hogar de calidad a contratistas y constructores particulares en toda la isla.',
+  'footer.help': 'Ayuda',
+  'footer.locations': 'Sucursales',
+  'footer.admin': 'Administración',
+  'footer.backOffice': 'Panel administrativo',
+  'footer.rights': '© {year} Tools Jamaica. Todos los derechos reservados.',
+
+  // --- Home -----------------------------------------------------------------
+  'home.featuredRail': 'Destacados de la semana',
+  'home.noFeatured': 'Aún no hay productos destacados.',
+  'home.catalogRail': 'Más del catálogo',
+  'home.noProducts': 'Aún no hay productos.',
+  'home.needItToday': '¿Lo necesitas hoy?',
+  'home.needItTodaySub': 'Escríbenos por WhatsApp para cotizaciones rápidas.',
+  'home.shopByDepartment': 'Comprar por departamento',
+  'home.ctaHeading': '¿Listo para empezar tu próximo proyecto?',
+  'home.ctaSub': 'Explora el catálogo completo y construye con confianza.',
+  'home.visitUs': 'Visítanos',
+  'home.visitUsSub': 'Encuentra la sucursal más cercana.',
+  'home.getDirections': 'Cómo llegar',
+  'home.topBrands': 'Marcas principales',
+
+  // --- Shop -----------------------------------------------------------------
+  'shop.title': 'Tienda',
+  'shop.count_one': '{count} producto',
+  'shop.count_other': '{count} productos',
+  'shop.sortBy': 'Ordenar por',
+  'shop.sortAria': 'Ordenar productos',
+  'shop.sort.featured': 'Destacados',
+  'shop.sort.priceAsc': 'Precio: de menor a mayor',
+  'shop.sort.priceDesc': 'Precio: de mayor a menor',
+  'shop.sort.name': 'Nombre A–Z',
+  'shop.sort.relevance': 'Relevancia',
+  'shop.filters': 'Filtros',
+  'shop.clearAll': 'Borrar todo',
+  'shop.apply': 'Aplicar',
+  'shop.noResults': 'Ningún producto coincide con tus filtros.',
+  'shop.filter.category': 'Categoría',
+  'shop.filter.brand': 'Marca',
+  'shop.filter.noBrands': 'Sin marcas',
+  'shop.filter.price': 'Precio (J$)',
+  'shop.filter.min': 'Mín.',
+  'shop.filter.max': 'Máx.',
+  'shop.filter.inStockOnly': 'Solo en existencia',
+
+  // --- Product card ---------------------------------------------------------
+  'card.featured': 'Destacado',
+  'card.lowStock': 'Pocas unidades',
+  'card.add': 'Agregar',
+
+  // --- Product detail -------------------------------------------------------
+  'product.notFound': 'Producto no encontrado',
+  'product.notFoundBody': 'Es posible que este producto haya sido eliminado.',
+  'product.backToShop': '← Volver a la tienda',
+  'product.viewImage': 'Ver imagen {n}',
+  'product.previousImage': 'Imagen anterior',
+  'product.nextImage': 'Imagen siguiente',
+  'product.getThisProduct': 'Obtener este producto',
+  'product.quantity': 'Cantidad',
+  'product.enquireWhatsapp': 'Consultar por WhatsApp',
+  'product.enquiryMessage': 'Hola, me interesa {name} ({ref}).',
+  'product.description': 'Descripción',
+  'product.specifications': 'Especificaciones',
+  'product.recommended': 'Productos recomendados',
+  'product.trust.delivery': 'Envío a toda la isla',
+  'product.trust.genuine': 'Solo marcas originales',
+  'product.trust.advice': 'Asesoría experta por teléfono',
+
+  // --- Cart -----------------------------------------------------------------
+  'cart.title': 'Tu carrito',
+  'cart.empty': 'Tu carrito está vacío',
+  'cart.clear': 'Vaciar carrito',
+  'cart.clearConfirmTitle': '¿Vaciar el carrito?',
+  'cart.clearConfirmBody': 'Se quitarán todos los artículos del carrito. Esta acción no se puede deshacer.',
+  'cart.checkout': 'Finalizar compra',
+  'cart.proceedToCheckout': 'Continuar con la compra',
+  'cart.viewCart': 'Ver carrito',
+  'cart.cancel': 'Cancelar',
+  'cart.working': 'Procesando…',
+
+  // --- Checkout -------------------------------------------------------------
+  'checkout.title': 'Finalizar compra',
+  'checkout.fullName': 'Nombre completo*',
+  'checkout.fullNamePlaceholder': 'Juana Pérez',
+  'checkout.phone': 'Teléfono*',
+  'checkout.phonePlaceholder': '+1 (876) 555-1234',
+  'checkout.email': 'Correo electrónico',
+  'checkout.emailPlaceholder': 'tu@ejemplo.com',
+  'checkout.fulfillment': 'Entrega',
+  'checkout.pickup': 'Recoger en tienda',
+  'checkout.delivery': 'Envío a domicilio',
+  'checkout.address': 'Dirección de envío*',
+  'checkout.addressPlaceholder': 'Calle, ciudad, parroquia',
+  'checkout.notes': 'Notas',
+  'checkout.notesPlaceholder': '¿Algo que debamos saber?',
+  'checkout.placeOrder': 'Realizar pedido',
+  'checkout.placingOrder': 'Enviando pedido…',
+  'checkout.backToCart': 'Volver al carrito',
+  'checkout.noPayment': 'No se cobra ningún pago en línea.',
+  'checkout.error.name': 'Ingresa tu nombre completo',
+  'checkout.error.phone': 'Ingresa un número de teléfono válido',
+  'checkout.error.email': 'Ingresa un correo electrónico válido',
+  'checkout.error.address': 'La dirección de envío es obligatoria',
+  'checkout.error.generic': 'Algo salió mal. Inténtalo de nuevo.',
+
+  // --- Order confirmation ---------------------------------------------------
+  'order.received': 'Pedido {number} recibido',
+  'order.willContact':
+    'Te llamaremos o te escribiremos por WhatsApp para confirmar la disponibilidad y coordinar el pago.',
+  'order.onFile':
+    'Tenemos tu pedido registrado. Escríbenos por WhatsApp con tu número de pedido y confirmaremos la disponibilidad y el pago.',
+  'order.sendWhatsapp': 'Enviar este pedido por WhatsApp',
+  'order.followUpMessage': '¡Hola Tools Jamaica! Quisiera dar seguimiento al pedido {number}.',
+  'order.continueShopping': 'Seguir comprando',
+
+  // --- Misc -----------------------------------------------------------------
+  'whatsapp.fabAria': 'Chatea con nosotros por WhatsApp',
+  'whatsapp.fabLabel': 'Chatea con nosotros',
+  'whatsapp.defaultMessage': '¡Hola Tools Jamaica! Quisiera preguntar por un producto.',
+  'notFound.title': 'Página no encontrada',
+  'notFound.body': 'La página que buscas no existe.',
+  'notFound.goHome': 'Ir al inicio',
+};

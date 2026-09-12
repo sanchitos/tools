@@ -1,15 +1,41 @@
 import { Icon } from './Icon.js';
 
+/**
+ * Accessible labels, English by default.
+ *
+ * Primitives in ui/* NEVER import from i18n/ — they are shared with the admin
+ * back-office, which stays English by agreement. Public callers pass t(...);
+ * admin call sites change nothing.
+ */
+export interface PaginationLabels {
+  nav: string;
+  first: string;
+  previous: string;
+  next: string;
+  last: string;
+}
+
+const DEFAULT_LABELS: PaginationLabels = {
+  nav: 'Pagination',
+  first: 'First page',
+  previous: 'Previous page',
+  next: 'Next page',
+  last: 'Last page',
+};
+
 /** Numbered pager with windowed page numbers and ellipsis truncation. */
 export function Pagination({
   page,
   pageCount,
   onChange,
+  labels,
 }: {
   page: number;
   pageCount: number;
   onChange: (page: number) => void;
+  labels?: Partial<PaginationLabels>;
 }) {
+  const l = { ...DEFAULT_LABELS, ...labels };
   if (pageCount <= 1) return null;
 
   const windowSize = 5;
@@ -22,10 +48,10 @@ export function Pagination({
     'flex h-9 min-w-9 items-center justify-center rounded px-2 text-label-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40';
 
   return (
-    <nav aria-label="Pagination" className="flex flex-wrap items-center justify-center gap-1">
+    <nav aria-label={l.nav} className="flex flex-wrap items-center justify-center gap-1">
       <button
         type="button"
-        aria-label="First page"
+        aria-label={l.first}
         disabled={page <= 1}
         onClick={() => onChange(1)}
         className={`${btnBase} text-ink-muted hover:bg-surface-muted`}
@@ -34,7 +60,7 @@ export function Pagination({
       </button>
       <button
         type="button"
-        aria-label="Previous page"
+        aria-label={l.previous}
         disabled={page <= 1}
         onClick={() => onChange(page - 1)}
         className={`${btnBase} text-ink-muted hover:bg-surface-muted`}
@@ -60,7 +86,7 @@ export function Pagination({
 
       <button
         type="button"
-        aria-label="Next page"
+        aria-label={l.next}
         disabled={page >= pageCount}
         onClick={() => onChange(page + 1)}
         className={`${btnBase} text-ink-muted hover:bg-surface-muted`}
@@ -69,7 +95,7 @@ export function Pagination({
       </button>
       <button
         type="button"
-        aria-label="Last page"
+        aria-label={l.last}
         disabled={page >= pageCount}
         onClick={() => onChange(pageCount)}
         className={`${btnBase} text-ink-muted hover:bg-surface-muted`}

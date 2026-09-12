@@ -17,6 +17,12 @@ import type {
   ProductListQuery,
   ProductSummaryDTO,
   ProfileDTO,
+  Locale,
+  AdminHomeContentDTO,
+  AdminHomeTileDTO,
+  AdminStoreLocationDTO,
+  HomeContentDTO,
+  StoreLocationDTO,
 } from '@tools-jamaica/shared';
 
 /**
@@ -28,6 +34,21 @@ import type {
  * (deduped across concurrent calls) and replays the original request.
  */
 const BASE = '/api/v1';
+
+/**
+ * Language for every catalog read, injected once in buildUrl() rather than
+ * threaded through ~20 api methods.
+ *
+ * Set from main.tsx BEFORE the first render — HomePage fires api.categories()
+ * on mount, so the client must already know the locale by then. This module
+ * deliberately does NOT import from i18n/ (main.tsx imports both), so the
+ * dependency stays one-directional.
+ */
+let currentLocale: Locale = 'en';
+
+export function setApiLocale(locale: Locale): void {
+  currentLocale = locale;
+}
 
 export class ApiError extends Error {
   readonly status: number;
@@ -74,6 +95,10 @@ function buildUrl(path: string, query?: Record<string, unknown>): string {
       }
     }
   }
+  // Only for non-English, so every English URL stays byte-identical to before:
+  // no cache churn, no test churn. Harmless on admin routes — their zod schemas
+  // don't declare `lang` and z.object().parse() strips unknown keys.
+  if (currentLocale !== 'en') url.searchParams.set('lang', currentLocale);
   return url.pathname + url.search;
 }
 
@@ -169,6 +194,11 @@ export const api = {
   product: (slug: string) => request<ProductDetailDTO>(`/products/${encodeURIComponent(slug)}`),
   categories: () => request<CategoryDTO[]>('/categories'),
   brands: () => request<BrandDTO[]>('/brands'),
+  featuredBrands: () => request<BrandDTO[]>('/brands/featured'),
+  /** One payload for the whole homepage — see catalog/homeService.ts. */
+  home: () => request<HomeContentDTO>('/home'),
+  /** Separate and small: the Footer renders on every page. */
+  locations: () => request<StoreLocationDTO[]>('/locations'),
 
   // --- Orders (guest checkout — public, no auth) ---
   // No CSRF header needed: /api/v1/orders is exempt (see apps/api/src/app.ts) —
@@ -216,10 +246,40 @@ export const api = {
   updateBrand: (id: string, body: unknown) =>
     request<AdminBrandDTO>(`/admin/brands/${id}`, { method: 'PATCH', body }),
   deleteBrand: (id: string) => request<void>(`/admin/brands/${id}`, { method: 'DELETE' }),
+  uploadBrandLogo: (id: string, form: FormData) =>
+    uploadFile<AdminBrandDTO>(`/admin/brands/${id}/logo`, form),
+
+  // --- Admin: homepage ---
+  adminHome: () => request<AdminHomeContentDTO>('/admin/home'),
+  updateHero: (body: unknown) =>
+    request<AdminHomeContentDTO['hero']>('/admin/home/hero', { method: 'PATCH', body }),
+  uploadHeroImage: (form: FormData) =>
+    uploadFile<AdminHomeContentDTO['hero']>('/admin/home/hero/image', form),
+  createTile: (body: unknown) =>
+    request<AdminHomeTileDTO>('/admin/home/tiles', { method: 'POST', body }),
+  updateTile: (id: string, body: unknown) =>
+    request<AdminHomeTileDTO>(`/admin/home/tiles/${id}`, { method: 'PATCH', body }),
+  deleteTile: (id: string) => request<void>(`/admin/home/tiles/${id}`, { method: 'DELETE' }),
+  uploadTileImage: (id: string, form: FormData) =>
+    uploadFile<AdminHomeTileDTO>(`/admin/home/tiles/${id}/image`, form),
+
+  // --- Admin: locations ---
+  adminLocations: () => request<AdminStoreLocationDTO[]>('/admin/locations'),
+  createLocation: (body: unknown) =>
+    request<AdminStoreLocationDTO>('/admin/locations', { method: 'POST', body }),
+  updateLocation: (id: string, body: unknown) =>
+    request<AdminStoreLocationDTO>(`/admin/locations/${id}`, { method: 'PATCH', body }),
+  deleteLocation: (id: string) => request<void>(`/admin/locations/${id}`, { method: 'DELETE' }),
+  uploadLocationImage: (id: string, form: FormData) =>
+    uploadFile<AdminStoreLocationDTO>(`/admin/locations/${id}/image`, form),
 
   // --- Admin: maintenance ---
-  cleanupOrphans: () =>
-    request<OrphanCleanupResult>('/admin/images/cleanup-orphans', { method: 'POST' }),
+  /** `dryRun` resolves the orphan list without deleting — always scan first. */
+  cleanupOrphans: (dryRun = false) =>
+    request<OrphanCleanupResult>('/admin/images/cleanup-orphans', {
+      method: 'POST',
+      query: dryRun ? { dryRun: 'true' } : undefined,
+    }),
 
   // --- Admin: orders ---
   adminOrders: (query: { status?: OrderStatus; q?: string; page?: number; pageSize?: number } = {}) =>

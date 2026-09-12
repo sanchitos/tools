@@ -10,10 +10,11 @@ const app = createApp();
 
 const productRow = (over: Record<string, unknown> = {}) => ({
   id: 'p1', slug: 'demo-product', name: 'Demo Product', brand_id: null, category_id: 'c1',
-  short_description: 'short', description: 'long', price: '1999.00', currency: 'JMD',
+  name_es: 'Producto Demo', short_description: 'short', short_description_es: 'corto',
+  description: 'long', description_es: null, price: '1999.00', currency: 'JMD',
   stock: 5, sku: 'SKU1', featured: true, is_published: true, rating: '4.5', review_count: 3,
   created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
-  brand: null, category: { id: 'c1', slug: 'doors', label: 'Doors' },
+  brand: null, category: { id: 'c1', slug: 'doors', label: 'Doors', label_es: 'Puertas' },
   images: [{ id: 'i1', product_id: 'p1', url: 'https://x/y.jpg', is_primary: true, alt_text: 'a', sort_order: 0, created_at: '2026-01-01T00:00:00Z' }],
   ...over,
 });
@@ -110,6 +111,55 @@ describe('catalog API', () => {
     const [, rpcArgs] = rpcCalls[rpcCalls.length - 1] as [string, { p_category_slugs: string[] }];
     expect(rpcArgs.p_category_slugs).toEqual(expect.arrayContaining(['tiles', 'ceramic', 'porcelain']));
     expect(rpcArgs.p_category_slugs).toHaveLength(3);
+  });
+
+  it('GET /products?lang=es resolves _es columns, falling back per field', async () => {
+    queueResult('products', { data: [productRow()], error: null, count: 1 });
+    const res = await request(app).get('/api/v1/products?lang=es');
+    expect(res.status).toBe(200);
+    const item = res.body.items[0];
+    expect(item.name).toBe('Producto Demo');
+    expect(item.shortDescription).toBe('corto');
+    expect(item.category.label).toBe('Puertas');
+    // The public DTO shape is unchanged — resolution happens server-side.
+    expect(item).not.toHaveProperty('nameEs');
+  });
+
+  it('a blank _es string is treated as absent, not as a blank product name', async () => {
+    // An admin who types into name_es and then clears it leaves '' behind; a
+    // naive `?? ` would render a nameless product on the storefront.
+    queueResult('products', {
+      data: [productRow({ name_es: '   ', short_description_es: '' })],
+      error: null,
+      count: 1,
+    });
+    const res = await request(app).get('/api/v1/products?lang=es');
+    expect(res.status).toBe(200);
+    expect(res.body.items[0].name).toBe('Demo Product');
+    expect(res.body.items[0].shortDescription).toBe('short');
+  });
+
+  it('GET /products?lang=fr degrades to English rather than 400-ing the page', async () => {
+    queueResult('products', { data: [productRow()], error: null, count: 1 });
+    const res = await request(app).get('/api/v1/products?lang=fr');
+    expect(res.status).toBe(200);
+    expect(res.body.items[0].name).toBe('Demo Product');
+  });
+
+  it('search passes p_lang to the RPC so the Spanish config + fallback leg apply', async () => {
+    queueRpc('search_products', {
+      data: [{ product_id: 'p1', score: 1, total_count: 1 }],
+      error: null,
+    });
+    queueResult('products', { data: [productRow()], error: null });
+
+    const res = await request(app).get('/api/v1/products?q=taladro&lang=es');
+    expect(res.status).toBe(200);
+
+    const rpcCalls = db.rpc.mock.calls.filter(([name]) => name === 'search_products');
+    const [, rpcArgs] = rpcCalls[rpcCalls.length - 1] as [string, { p_lang: string }];
+    expect(rpcArgs.p_lang).toBe('es');
+    expect(res.body.items[0].name).toBe('Producto Demo');
   });
 
   it('GET /products/:slug returns 404 when missing', async () => {

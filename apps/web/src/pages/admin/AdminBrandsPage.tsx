@@ -3,6 +3,7 @@ import type { AdminBrandDTO } from '@tools-jamaica/shared';
 import { api, ApiError } from '../../lib/api.js';
 import { useAsync } from '../../lib/useAsync.js';
 import { Button, ConfirmDialog, Loader } from '../../components/ui/index.js';
+import { ImageUploadField } from '../../components/admin/ImageUploadField.js';
 
 type Editing = 'new' | AdminBrandDTO | null;
 const input = 'w-full rounded border border-border bg-surface px-3 py-2 text-body-md text-ink focus:border-primary';
@@ -52,6 +53,7 @@ export default function AdminBrandsPage() {
               <tr className="bg-neutralStrong text-left text-label-sm uppercase tracking-wide text-neutralStrong-fg">
                 <th className="px-4 py-3 font-semibold">Name</th>
                 <th className="px-4 py-3 font-semibold">Slug</th>
+                <th className="px-4 py-3 font-semibold">Featured</th>
                 <th className="px-4 py-3 font-semibold">Order</th>
                 <th className="px-4 py-3 text-right font-semibold">Actions</th>
               </tr>
@@ -61,6 +63,7 @@ export default function AdminBrandsPage() {
                 <tr key={b.id} className={i % 2 ? 'bg-surface-muted' : 'bg-surface'}>
                   <td className="px-4 py-3 font-medium text-ink">{b.name}</td>
                   <td className="px-4 py-3 text-ink-muted">{b.slug}</td>
+                  <td className="px-4 py-3 text-ink-muted">{b.isFeatured ? 'Yes' : '—'}</td>
                   <td className="px-4 py-3 text-ink-muted">{b.sortOrder}</td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">
@@ -71,7 +74,7 @@ export default function AdminBrandsPage() {
                 </tr>
               ))}
               {(data ?? []).length === 0 && (
-                <tr><td colSpan={4} className="px-4 py-10 text-center text-ink-muted">No brands yet.</td></tr>
+                <tr><td colSpan={5} className="px-4 py-10 text-center text-ink-muted">No brands yet.</td></tr>
               )}
             </tbody>
           </table>
@@ -105,6 +108,7 @@ function BrandForm({
   const [slug, setSlug] = useState(brand?.slug ?? '');
   const [logoUrl, setLogoUrl] = useState(brand?.logoUrl ?? '');
   const [sortOrder, setSortOrder] = useState(String(brand?.sortOrder ?? 0));
+  const [isFeatured, setIsFeatured] = useState(brand?.isFeatured ?? false);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -112,7 +116,13 @@ function BrandForm({
     e.preventDefault();
     setErr(null);
     setBusy(true);
-    const body = { name, slug: slug || undefined, logoUrl: logoUrl || null, sortOrder: Number(sortOrder) };
+    const body = {
+      name,
+      slug: slug || undefined,
+      logoUrl: logoUrl || null,
+      sortOrder: Number(sortOrder),
+      isFeatured,
+    };
     try {
       if (brand) await api.updateBrand(brand.id, body);
       else await api.createBrand(body);
@@ -136,7 +146,35 @@ function BrandForm({
           <input className={input} value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} /></label>
         <label className="block"><span className="mb-1 block text-label-sm font-semibold uppercase tracking-wide text-ink-muted">Sort order</span>
           <input className={input} type="number" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} /></label>
+        <label className="flex items-center gap-2 self-end pb-2 text-body-md text-ink">
+          <input
+            type="checkbox"
+            checked={isFeatured}
+            onChange={(e) => setIsFeatured(e.target.checked)}
+            className="h-4 w-4 rounded border-border accent-[color:var(--color-primary)]"
+          />
+          Show in the homepage brand rail
+        </label>
       </div>
+
+      {/* Brand names are never translated (proper nouns), so there is no
+          BilingualField here — only the logo is per-brand editable content. */}
+      {brand && (
+        <div className="mt-4">
+          <ImageUploadField
+            label="Logo"
+            url={brand.logoUrl}
+            hint="Replaces the current logo; the old file is deleted."
+            onUpload={async (file) => {
+              const form = new FormData();
+              form.append('file', file);
+              const updated = await api.uploadBrandLogo(brand.id, form);
+              setLogoUrl(updated.logoUrl ?? '');
+              return updated.logoUrl;
+            }}
+          />
+        </div>
+      )}
       {err && <p className="mt-3 text-body-md text-error">{err}</p>}
       <div className="mt-5 flex gap-3">
         <Button type="submit" variant="accent" disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>

@@ -1,4 +1,5 @@
 import { Routes, Route } from 'react-router-dom';
+import { useLocale } from './i18n/LocaleContext.js';
 import { PublicLayout } from './components/PublicLayout.js';
 import { AdminLayout } from './components/admin/AdminLayout.js';
 import HomePage from './pages/HomePage.js';
@@ -13,13 +14,24 @@ import AdminProductsPage from './pages/admin/AdminProductsPage.js';
 import ProductEditorPage from './pages/admin/ProductEditorPage.js';
 import AdminCategoriesPage from './pages/admin/AdminCategoriesPage.js';
 import AdminBrandsPage from './pages/admin/AdminBrandsPage.js';
+import AdminHomePage from './pages/admin/AdminHomePage.js';
+import AdminLocationsPage from './pages/admin/AdminLocationsPage.js';
 import AdminOrdersPage from './pages/admin/AdminOrdersPage.js';
 import AdminOrderDetailPage from './pages/admin/AdminOrderDetailPage.js';
 
 /** Route table: public storefront (Stitch design) + admin back-office (gated). */
 export default function App() {
+  const { locale } = useLocale();
+
+  // `key={locale}` remounts the routed tree on a language switch, which refires
+  // every catalog fetch. There are 12+ such call sites; adding `locale` to each
+  // useAsync dep array and missing one yields a half-translated page nobody
+  // notices until a customer does. Audited casualties: ShopPage filters are
+  // URL-synced (safe), the cart lives above <Routes> (safe), scroll position is
+  // lost (acceptable), and CheckoutPage form state is lost — which is why the
+  // LocaleSwitcher hides itself on /checkout.
   return (
-    <Routes>
+    <Routes key={locale}>
       {/* Public storefront */}
       <Route element={<PublicLayout />}>
         <Route path="/" element={<HomePage />} />
@@ -39,6 +51,8 @@ export default function App() {
         <Route path="products/:id" element={<ProductEditorPage />} />
         <Route path="categories" element={<AdminCategoriesPage />} />
         <Route path="brands" element={<AdminBrandsPage />} />
+        <Route path="homepage" element={<AdminHomePage />} />
+        <Route path="locations" element={<AdminLocationsPage />} />
         <Route path="orders" element={<AdminOrdersPage />} />
         <Route path="orders/:id" element={<AdminOrderDetailPage />} />
       </Route>
