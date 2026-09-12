@@ -8,10 +8,12 @@ import type {
   AdminProductHighlightDTO,
   AdminProductListItem,
   AdminProductSpecDTO,
+  AdminUserListItem,
 } from '@tools-jamaica/shared';
 import type {
   BrandRow,
   CategoryRow,
+  ProfileRow,
   HomeHeroRow,
   HomeTileRow,
   ProductHighlightRow,
@@ -136,5 +138,23 @@ export function toAdminStoreLocationDTO(row: StoreLocationRow): AdminStoreLocati
     nameEs: row.name_es,
     hoursEs: row.hours_es,
     isPublished: row.is_published,
+  };
+}
+
+// --- Users ------------------------------------------------------------------
+
+/**
+ * `profiles` only. Confirmation state (`email_confirmed_at`) lives on
+ * auth.users and would need a separately paginated admin listUsers() merged in
+ * — a deliberate omission, noted on AdminUserListItem in the shared package.
+ */
+export function toAdminUserListItem(row: ProfileRow): AdminUserListItem {
+  return {
+    id: row.id,
+    email: row.email,
+    fullName: row.full_name,
+    role: row.role,
+    isActive: row.is_active,
+    createdAt: row.created_at,
   };
 }

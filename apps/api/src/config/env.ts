@@ -33,6 +33,14 @@ const EnvSchema = z.object({
   // *closed* (404s the whole route) when this is unset, so an unconfigured
   // deploy never leaves the endpoint open.
   AGENT_API_KEY: z.preprocess(emptyToUndefined, z.string().min(32).optional()),
+
+  // Transactional email (Resend REST API) for signup confirmation links.
+  // Optional for the same reason as AGENT_API_KEY above: test/setup.ts and
+  // existing dev envs must keep booting. lib/email.ts fails *closed* in
+  // production (throws) and, outside it, logs the message instead of sending —
+  // which is what makes the whole signup loop testable locally with no key.
+  RESEND_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  EMAIL_FROM: z.preprocess(emptyToUndefined, z.string().min(3).optional()),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

@@ -229,3 +229,38 @@ export type LocationUpdate = z.infer<typeof locationUpdateSchema>;
 export const orphanCleanupQuerySchema = z.object({
   dryRun: z.preprocess((v) => v === 'true' || v === true, z.boolean().optional()),
 });
+
+// --- Users -----------------------------------------------------------------
+
+const role = z.enum(['admin', 'customer']);
+
+export const userListQuerySchema = z.object({
+  /** Matched against email OR full_name. */
+  q: z.string().trim().min(1).max(160).optional(),
+  role: role.optional(),
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().positive().max(100).default(20),
+});
+
+/**
+ * Admin-created accounts are pre-confirmed (no email is sent) and the admin
+ * hands the password over out of band — hence a required password here, unlike
+ * the public signup flow.
+ */
+export const userCreateSchema = z.object({
+  email: z.string().trim().email().max(200),
+  password: z.string().min(8).max(200),
+  fullName: z.string().trim().min(1).max(120).optional(),
+  role: role.default('customer'),
+});
+
+/**
+ * Activate/deactivate only. Role changes, password resets and hard deletes are
+ * deliberately not here yet: each needs its own thinking about what happens to
+ * a live session, and deactivation already covers "stop this person now".
+ */
+export const userUpdateSchema = z.object({ isActive: z.boolean() });
+
+export type AdminUserListQuery = z.infer<typeof userListQuerySchema>;
+export type UserCreate = z.infer<typeof userCreateSchema>;
+export type UserUpdate = z.infer<typeof userUpdateSchema>;

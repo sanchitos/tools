@@ -63,3 +63,20 @@ export const orderRateLimit = rateLimit({
     error: { code: 'RATE_LIMITED', message: 'Too many orders submitted, try again later' },
   },
 });
+
+/**
+ * Rate limiter for the signup surface (/auth/signup, /auth/resend-confirmation).
+ * Each request creates a GoTrue user or sends an email on our Resend quota, so
+ * it gets the order-endpoint budget (an hour window, single-digit limit) rather
+ * than the auth limiter's 20-per-15-minutes, which is sized for someone
+ * retyping a password.
+ */
+export const signupRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: isTest ? 1000 : 5,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: {
+    error: { code: 'RATE_LIMITED', message: 'Too many attempts, try again later' },
+  },
+});

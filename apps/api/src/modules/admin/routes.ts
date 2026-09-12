@@ -23,6 +23,9 @@ import {
   tileCreateSchema,
   tileUpdateSchema,
   updateOrderStatusSchema,
+  userCreateSchema,
+  userListQuerySchema,
+  userUpdateSchema,
 } from './schema.js';
 import * as svc from './service.js';
 
@@ -307,6 +310,35 @@ export function adminRouter(): Router {
     ah(async (req, res) => {
       const { id } = idParamSchema.parse(req.params);
       res.json(await svc.setLocationImage(id, requireImage(req)));
+    }),
+  );
+
+  // --- Users ---------------------------------------------------------------
+  router.get(
+    '/users',
+    ah(async (req, res) => {
+      res.json(await svc.listAdminUsers(userListQuerySchema.parse(req.query)));
+    }),
+  );
+
+  router.post(
+    '/users',
+    validate({ body: userCreateSchema }),
+    ah(async (req, res) => {
+      res.status(201).json(await svc.createUser(req.body));
+    }),
+  );
+
+  router.patch(
+    '/users/:id',
+    validate({ body: userUpdateSchema }),
+    ah(async (req, res) => {
+      const { id } = idParamSchema.parse(req.params);
+      // The only self-change this endpoint can make is a deactivation (you are
+      // active by definition if you got here), and locking the last admin out
+      // of their own back office is not a mistake worth allowing.
+      if (id === req.user!.id) throw AppError.Conflict('You cannot deactivate your own account.');
+      res.json(await svc.setUserActive(id, (req.body as { isActive: boolean }).isActive));
     }),
   );
 

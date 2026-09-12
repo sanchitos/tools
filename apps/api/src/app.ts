@@ -25,10 +25,18 @@ import { mountSpa } from './lib/serveSpa.js';
  * — which a guest order has none of. orderRateLimit (see middleware/rateLimit.ts)
  * is the real control on this endpoint, not CSRF. Admin order mutations are
  * NOT exempt — they stay behind the normal cookie+CSRF admin session.
+ * The three signup routes are exempt for that same reason (a visitor who has
+ * never logged in has no CSRF cookie to echo), and signupRateLimit is their
+ * control. They are listed INDIVIDUALLY and must stay that way: this list is
+ * matched with startsWith, so shortening them to '/api/v1/auth' would silently
+ * exempt /logout too.
  */
 const CSRF_EXEMPT = [
   '/api/v1/auth/login',
   '/api/v1/auth/refresh',
+  '/api/v1/auth/signup',
+  '/api/v1/auth/confirm',
+  '/api/v1/auth/resend-confirmation',
   '/api/v1/agent',
   '/api/v1/orders',
 ];

@@ -99,6 +99,8 @@ export interface ProductHighlightRow {
 
 export interface OrderRow {
   id: string;
+  /** The account that placed it (0011); NULL for a guest order. */
+  user_id: string | null;
   order_number: string;
   customer_name: string;
   customer_phone: string;

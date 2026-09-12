@@ -7,6 +7,7 @@ import { DepartmentDrawer } from './DepartmentDrawer.js';
 import { Logo } from './Logo.js';
 import { PHONE_DISPLAY, whatsappUrl } from '../lib/contact.js';
 import { useCart } from '../context/CartContext.js';
+import { useAuth } from '../context/AuthContext.js';
 import { LocaleSwitcher } from './LocaleSwitcher.js';
 import { useT } from '../i18n/LocaleContext.js';
 
@@ -17,6 +18,7 @@ export function Header() {
   const navigate = useNavigate();
   const location = useLocation();
   const { count, open: openCart } = useCart();
+  const { user } = useAuth();
   const t = useT();
   const waUrl = whatsappUrl(t('whatsapp.defaultMessage'));
 
@@ -101,12 +103,18 @@ export function Header() {
               <Icon name="whatsapp" className="text-lg" />
               {t('nav.whatsapp')}
             </a>
+            {/* One affordance, three destinations: the back office for an
+                admin, the shopper's own page when signed in, sign-in when not.
+                The old link always pointed at /admin, which now bounces a
+                customer straight back out again. */}
             <Link
-              to="/admin"
+              to={user ? (user.role === 'admin' ? '/admin' : '/account') : '/login'}
               className="flex items-center gap-1.5 text-label-sm font-semibold hover:text-accent"
             >
               <Icon name="user" className="text-xl" />
-              <span className="hidden lg:inline">{t('nav.admin')}</span>
+              <span className="hidden lg:inline">
+                {user ? (user.role === 'admin' ? t('nav.admin') : t('account.nav')) : t('auth.signIn')}
+              </span>
             </Link>
             <button
               type="button"

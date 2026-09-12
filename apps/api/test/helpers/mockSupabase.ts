@@ -14,6 +14,9 @@ export interface QueryResult {
 const queues: Record<string, QueryResult[]> = {};
 let signInResult: unknown = null;
 let refreshResult: unknown = null;
+let generateLinkResult: unknown = null;
+let createUserResult: unknown = null;
+let verifyOtpResult: unknown = null;
 
 export function queueResult(table: string, result: QueryResult): void {
   (queues[table] ??= []).push(result);
@@ -28,12 +31,30 @@ export function setSignIn(result: unknown): void {
 export function setRefresh(result: unknown): void {
   refreshResult = result;
 }
+/** Result for `db.auth.admin.generateLink()` (signup + resend-confirmation). */
+export function setGenerateLink(result: unknown): void {
+  generateLinkResult = result;
+}
+/** Result for `db.auth.admin.createUser()` (admin-created accounts). */
+export function setCreateUser(result: unknown): void {
+  createUserResult = result;
+}
+/** Result for `authAnon.auth.verifyOtp()` (email confirmation). */
+export function setVerifyOtp(result: unknown): void {
+  verifyOtpResult = result;
+}
 export function resetMocks(): void {
   for (const k of Object.keys(queues)) delete queues[k];
   signInResult = null;
   refreshResult = null;
+  generateLinkResult = null;
+  createUserResult = null;
+  verifyOtpResult = null;
   db.from.mockClear();
   db.rpc.mockClear();
+  db.auth.admin.generateLink.mockClear();
+  db.auth.admin.createUser.mockClear();
+  authAnon.auth.verifyOtp.mockClear();
 }
 
 function take(table: string): QueryResult {
@@ -63,7 +84,12 @@ export const db = {
   rpc: vi.fn((name: string, _args?: Record<string, unknown>) =>
     Promise.resolve(take(`rpc:${name}`)),
   ),
-  auth: { admin: {} },
+  auth: {
+    admin: {
+      generateLink: vi.fn(async () => generateLinkResult),
+      createUser: vi.fn(async () => createUserResult),
+    },
+  },
   storage: {},
 };
 
@@ -72,5 +98,6 @@ export const authAnon = {
     signInWithPassword: vi.fn(async () => signInResult),
     refreshSession: vi.fn(async () => refreshResult),
     signOut: vi.fn(async () => ({ error: null })),
+    verifyOtp: vi.fn(async () => verifyOtpResult),
   },
 };

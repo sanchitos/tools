@@ -9,6 +9,10 @@ import CartPage from './pages/CartPage.js';
 import CheckoutPage from './pages/CheckoutPage.js';
 import OrderConfirmationPage from './pages/OrderConfirmationPage.js';
 import NotFoundPage from './pages/NotFoundPage.js';
+import SignupPage from './pages/SignupPage.js';
+import LoginPage from './pages/LoginPage.js';
+import ConfirmEmailPage from './pages/ConfirmEmailPage.js';
+import AccountPage from './pages/AccountPage.js';
 import AdminLoginPage from './pages/admin/AdminLoginPage.js';
 import AdminProductsPage from './pages/admin/AdminProductsPage.js';
 import ProductEditorPage from './pages/admin/ProductEditorPage.js';
@@ -18,6 +22,7 @@ import AdminHomePage from './pages/admin/AdminHomePage.js';
 import AdminLocationsPage from './pages/admin/AdminLocationsPage.js';
 import AdminOrdersPage from './pages/admin/AdminOrdersPage.js';
 import AdminOrderDetailPage from './pages/admin/AdminOrderDetailPage.js';
+import AdminUsersPage from './pages/admin/AdminUsersPage.js';
 
 /** Route table: public storefront (Stitch design) + admin back-office (gated). */
 export default function App() {
@@ -40,6 +45,12 @@ export default function App() {
         <Route path="/cart" element={<CartPage />} />
         <Route path="/checkout" element={<CheckoutPage />} />
         <Route path="/order/:orderNumber" element={<OrderConfirmationPage />} />
+        {/* Customer accounts — siblings of the routes above so the `*`
+            catch-all below stays last. */}
+        <Route path="/signup" element={<SignupPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/auth/confirm" element={<ConfirmEmailPage />} />
+        <Route path="/account" element={<AccountPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
 
@@ -55,6 +66,7 @@ export default function App() {
         <Route path="locations" element={<AdminLocationsPage />} />
         <Route path="orders" element={<AdminOrdersPage />} />
         <Route path="orders/:id" element={<AdminOrderDetailPage />} />
+        <Route path="users" element={<AdminUsersPage />} />
       </Route>
     </Routes>
   );

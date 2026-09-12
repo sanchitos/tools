@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import type { Fulfillment } from '@tools-jamaica/shared';
 import { useCart } from '../context/CartContext.js';
+import { useAuth } from '../context/AuthContext.js';
 import { api, ApiError } from '../lib/api.js';
 import { Breadcrumbs, Container, Input, Select } from '../components/ui/index.js';
 import { formatPrice } from '../lib/format.js';
@@ -29,8 +30,16 @@ const initialForm: FormState = {
 export default function CheckoutPage() {
   const t = useT();
   const { lines, subtotal, clear } = useCart();
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState<FormState>(initialForm);
+  // Prefilled from the session when there is one, as the initial state rather
+  // than an effect: /auth/me has already resolved by the time a shopper can
+  // navigate here, and an effect would overwrite whatever they had typed.
+  // Guest checkout is untouched — with no session these stay blank. The order
+  // is stamped with user_id server-side either way (optionalAuth).
+  const [form, setForm] = useState<FormState>(() =>
+    user ? { ...initialForm, customerName: user.fullName ?? '', customerEmail: user.email } : initialForm,
+  );
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [unavailable, setUnavailable] = useState<string[]>([]);

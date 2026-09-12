@@ -41,15 +41,16 @@ tools-jamaica/
 │   │   │   ├── routes.ts            # mounts module routers under /api/v1
 │   │   │   ├── config/env.ts        # zod-validated env (fail-fast at boot)
 │   │   │   ├── lib/                 # supabase, jwt, cookies, pricing, errors,
-│   │   │   │                        #   storage, slug, logger, serveSpa
+│   │   │   │                        #   storage, slug, logger, email, serveSpa
 │   │   │   ├── middleware/          # auth, csrf, validate, rateLimit, errorHandler
 │   │   │   ├── modules/
 │   │   │   │   ├── catalog/         # public reads: products, categories, brands
-│   │   │   │   ├── auth/            # admin login/logout/me/refresh
-│   │   │   │   └── admin/           # role-gated CRUD + image upload
+│   │   │   │   ├── auth/            # login/logout/me/refresh + signup/confirm
+│   │   │   │   ├── account/         # the signed-in shopper's own data
+│   │   │   │   └── admin/           # role-gated CRUD + image upload + users
 │   │   │   └── types/               # db row types, express augmentation
 │   │   ├── supabase/
-│   │   │   ├── migrations/          # 0001_init … 0010_homepage_content (run by hand)
+│   │   │   ├── migrations/          # 0001_init … 0011_user_accounts (run by hand)
 │   │   │   └── seed.sql
 │   │   └── test/                    # vitest + supertest (hermetic, mocked)
 │   └── web/                         # React + Vite SPA
@@ -57,7 +58,7 @@ tools-jamaica/
 │           ├── App.tsx              # route table
 │           ├── pages/               # public pages + pages/admin/*
 │           ├── components/          # shared UI (ui/*) + layout + ProductCard
-│           ├── context/             # AuthContext (admin session)
+│           ├── context/             # AuthContext (admin + customer session)
 │           ├── styles/tokens.css    # design tokens from Stitch
 │           └── lib/                 # api client, useAsync, formatters
 ├── packages/
@@ -101,10 +102,12 @@ Supabase (Postgres + RLS defense-in-depth, GoTrue auth, Storage)
 
 ---
 
-## 4. Authentication (admin, cookie-proxied)
+## 4. Authentication (cookie-proxied)
 
 The browser never holds a token. Express owns the whole auth surface and keeps
-the session in signed, httpOnly cookies.
+the session in signed, httpOnly cookies. One session mechanism serves both
+audiences — `profiles.role` (`admin` | `customer`) is the only thing that
+separates an admin from a shopper.
 
 - **Two server-side Supabase clients** (`lib/supabase.ts`): `db` (service-role,
   bypasses RLS, all data + GoTrue admin ops) and `authAnon` (anon key, drives
@@ -121,7 +124,10 @@ the session in signed, httpOnly cookies.
 - **Middleware** (`middleware/auth.ts`): `requireAuth` verifies the access token
   and, if it's expired/invalid, transparently refreshes and rotates the cookies
   before continuing; `requireRole('admin')` gates the admin API; `optionalAuth`
-  exists for forward-compat (unused in Phase 1's public catalog).
+  populates `req.user` without ever blocking, and backs `POST /orders` so a
+  signed-in shopper's order is stamped with their id while guest checkout is
+  unchanged. Both re-read the profile on every request, so deactivating an
+  account takes effect on that person's very next call — no token revocation.
 - **Client auto-refresh** (`web/src/lib/api.ts`): on a 401 from a non-auth route,
   it calls `/auth/refresh` once (deduped) and replays the request.
 
@@ -132,10 +138,61 @@ the session in signed, httpOnly cookies.
 | POST | `/login` | GoTrue `signInWithPassword`; sets cookies; returns profile (no tokens). Rate-limited, CSRF-exempt. |
 | POST | `/refresh` | Rotates the session from the refresh cookie. Rate-limited, CSRF-exempt. |
 | POST | `/logout` | Clears cookies (CSRF-protected). |
-| GET | `/me` | Current admin profile from the session cookie. |
+| GET | `/me` | Current profile from the session cookie. |
+| POST | `/signup` | Public self-registration (always `customer`). Creates an **unconfirmed** account, emails the link, returns **202** and **no cookies**. Rate-limited, CSRF-exempt. |
+| POST | `/confirm` | Verifies the emailed token and sets the session. Rate-limited, CSRF-exempt. |
+| POST | `/resend-confirmation` | Re-issues a link. **Always 204**, whatever happened. Rate-limited, CSRF-exempt. |
+
+The three signup routes are CSRF-exempt because a visitor who has never logged
+in has no `sw_csrf` cookie to double-submit; `signupRateLimit` (5/hour) is their
+real control. They are listed **individually** in `app.ts`'s `CSRF_EXEMPT` —
+that list is matched with `startsWith`, so collapsing them to `/api/v1/auth`
+would silently exempt `/logout` too.
+
+### Signup & email confirmation
+
+We send the confirmation email **ourselves**, through the Resend REST API
+(`lib/email.ts`, no new dependency — Node 24's `fetch`), rather than through
+Supabase's SMTP. `db.auth.admin.generateLink()` creates the user and returns the
+token *without sending anything*, which keeps the template in this repo, the
+only mail config in `apps/api/.env`, and guarantees no competing Supabase email
+(we never call `authAnon.auth.signUp()`).
+
+```
+POST /auth/signup
+  -> generateLink({ type:'signup', ... })  creates auth.users (unconfirmed)
+                                           -> trigger creates profiles (customer)
+  -> sendConfirmationEmail(to, `${APP_BASE_URL}/auth/confirm?token=...&type=signup`)
+  -> 202 { status:'confirmation_sent', email }          <- no cookies
+
+link -> SPA /auth/confirm -> POST /auth/confirm { token, type }
+  -> authAnon.auth.verifyOtp({ token_hash, type }) -> session
+  -> setSession(res, tokens) -> 200 ProfileDTO
+```
+
+The link points at the **SPA**, which POSTs the token to Express — so the
+browser still never holds a token. With `RESEND_API_KEY` unset, `lib/email.ts`
+logs the link to the API console instead of sending (and throws in production),
+which is what makes the whole loop testable before a verified domain exists.
+
+A **resend** is issued as `generateLink({ type: 'magiclink' })`: GoTrue refuses
+to regenerate a `signup` link for a user that already exists, and verifying a
+magiclink stamps `email_confirmed_at` just the same — hence `/confirm` accepting
+both types. Supabase's **"Confirm email" provider setting must be ON**; it is
+what makes `signInWithPassword` reject an unconfirmed user, which the API maps
+to a `403 EMAIL_NOT_CONFIRMED` (not the misleading "invalid email or password")
+so the SPA can offer a resend.
+
+Duplicate signup answers **409**, which does leak that an address is registered.
+That is a deliberate trade: a storefront that silently swallows a duplicate
+signup generates support tickets, and the enumeration risk on a hardware
+catalog is acceptable. `/resend-confirmation` makes the opposite call — it has
+no UX cost to silence, so it always answers 204.
 
 **First admin:** sign the user up in Supabase Auth, then set that
-`profiles.role = 'admin'`. No public signup route in Phase 1.
+`profiles.role = 'admin'`. After that, admins are created from the back-office
+**Users** page. There is no public route that can mint an admin: `signupSchema`
+has no `role` field at all.
 
 ---
 
@@ -153,6 +210,11 @@ Supabase SQL Editor, in order.
 - **`categories`** — `slug` (unique), `label`, `image_url`, `sort_order`,
   `is_published`. A **table with an FK from products** (not a hard enum) so admins
   add categories without a migration.
+- **`orders`** — `user_id` (FK to `profiles`, **nullable**, `on delete set
+  null`): NULL is a guest order, and deleting an account must never erase order
+  history. Added by `0011_user_accounts`, which is the whole database side of
+  customer accounts — `profiles` already carried the role enum, `is_active`, and
+  the `on_auth_user_created` trigger.
 - **`products`** — `slug` (unique), `name`, `brand_id` (FK, nullable),
   `category_id` (FK), descriptions, `price`, `currency`, `stock`, `sku` (unique),
   `featured`, `is_published`, `rating`/`review_count` (static display columns).
@@ -241,6 +303,16 @@ pageSize }`.
 | GET | `/home` | The whole editable homepage in **one** payload: hero, promos, services, ticker, featured brands, locations. |
 | GET | `/locations` | Branches — separate and small, because the Footer renders on every page. |
 
+### Account (`requireAuth`, the caller's own data only)
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/account/orders` | The caller's orders, newest first, with line items. Scoped by `user_id` **from the session** — never a parameter. |
+
+Its own module rather than a route on `ordersRouter`, because that router
+carries a router-level `orderRateLimit` of 10/hour: right for *placing* an
+order, wrong for reading a history page.
+
 Every public catalog route accepts **`?lang=en|es`** (`.catch('en')`, so an
 unknown value degrades rather than 400-ing a storefront page). A query param, not
 a custom header: `x-locale` is not CORS-safelisted (it would break the documented
@@ -259,8 +331,19 @@ language in the mappers, so no storefront component had to change.
 | GET/PATCH/POST | `/admin/home…` | Hero (singleton upsert) + hero image upload. |
 | GET/POST/PATCH/DELETE | `/admin/home/tiles…` | Tile CRUD + per-tile image upload. |
 | GET/POST/PATCH/DELETE | `/admin/locations…` | Store-location CRUD + photo upload. |
+| GET/POST/PATCH | `/admin/users…` | Paginated list (`?q=` email/name, `?role=`), create (`customer` **or** `admin`), activate/deactivate. |
 | POST | `/admin/brands/:id/logo` | Brand logo upload (replaces + deletes the old object). |
 | POST | `/admin/images/cleanup-orphans` | Sweep unreferenced Storage objects. `?dryRun=true` resolves the list without deleting. |
+
+Admin-created users are **pre-confirmed** (`email_confirm: true`) and no email
+is sent — the admin types the password and hands it over out of band. The list
+reads `profiles` only: `email_confirmed_at` lives on `auth.users`, and merging a
+separately paginated `listUsers()` into this one isn't worth it, so confirmation
+state is a deliberate omission. Role change, password reset and hard delete are
+**not** here yet; deactivation already covers "stop this person now", and it
+bites immediately because `requireAuth` re-reads the profile per request.
+Self-deactivation is refused with a 409 rather than letting the last admin lock
+themselves out.
 
 **Admin-only fields** (`is_published`, `sort_order`, ids, timestamps) are stripped
 from the **public** DTOs and only exposed on the **admin** DTOs — as are the raw
@@ -313,10 +396,21 @@ columns with Spanish text. Do not "simplify" this into a global.
     lists carry a "No ES" badge so untranslated rows are findable.
 - **Pages.** Public: Home (hero, trust bar, departments, featured rail, CTA),
   Shop (URL-synced filters/search/sort + pagination), Product detail (gallery,
-  specs, highlights, related). Admin (utilitarian, same tokens): login, products
+  specs, highlights, related), plus the account flow — **Signup**, **Login**,
+  **/auth/confirm** and **Account** (order history), all under `PublicLayout`
+  and all translated. Admin (utilitarian, same tokens): login, products
   list, product editor + image manager, categories, brands — gated by
-  `AuthContext` + `AdminLayout`, plus **Homepage** (hero + the three tile slots)
-  and **Locations**.
+  `AuthContext` + `AdminLayout`, plus **Homepage** (hero + the three tile slots),
+  **Locations** and **Users**.
+- **`AdminLayout` gates on the role, not just on a session.** Until customers
+  could log in, any session there was an admin session; now a signed-in shopper
+  would otherwise see the whole back-office chrome with every panel 403-ing, so
+  a non-admin is redirected to `/account`. The header's single account
+  affordance resolves three ways: `/admin` for an admin, `/account` when signed
+  in, `/login` when not.
+- **`/auth/confirm` fires its POST exactly once** (a `useRef` guard): the token
+  is single-use, and StrictMode's double-invoked effect would otherwise show a
+  failure for a token the first attempt had just consumed.
 
 The homepage is **admin-editable**: hero, promo cards, trust tiles, ticker,
 featured brands and branches all come from `GET /home`. Nothing on it is
@@ -357,7 +451,12 @@ SUPABASE_JWT_SECRET=            # HS256 fallback; JWKS is the live path
 COOKIE_SECRET=                  # signs the session cookies
 APP_BASE_URL=https://<domain>   # canonical public origin (prod)
 # WEB_ORIGIN=http://localhost:5173   # dev-only CORS when running Vite separately
+RESEND_API_KEY=                 # optional; unset => confirmation link is LOGGED, not sent
+EMAIL_FROM=                     # e.g. "Tools Jamaica <no-reply@example.com>"
 ```
+
+`APP_BASE_URL` is also the host of the emailed confirmation link, so in local
+development it should point at the Vite dev server.
 
 ---
 
@@ -369,8 +468,9 @@ APP_BASE_URL=https://<domain>   # canonical public origin (prod)
   json → cookieParser → CSRF → `/api/v1/*` routers → `/health` → `/api` 404 →
   `express.static(apps/web/dist)` → SPA fallback (non-API GET → `index.html`),
   registered **after** the API routes.
-- **Tests:** Vitest + supertest in `apps/api`, hermetic (Supabase and JWKS are
-  mocked at the module boundary), covering app wiring, catalog reads, auth, and
+- **Tests:** Vitest + supertest in `apps/api`, hermetic (Supabase, JWKS and
+  `lib/email.ts` are mocked at the module boundary), covering app wiring,
+  catalog reads, auth (login, signup, confirmation), the account surface, and
   admin role-gating.
 - **Deploy:** a multi-stage `Dockerfile` at the repo root builds web + api on
   `node:24-alpine`, prunes dev deps, and runs `node apps/api/dist/index.js` as an
@@ -384,10 +484,12 @@ APP_BASE_URL=https://<domain>   # canonical public origin (prod)
 
 Documented extension points so these are additive later, not refactors:
 
+- **Password reset / forgot password** — the remaining gap in the account flow.
+  `/auth/resend-confirmation` is the shape it follows: a `generateLink({ type:
+  'recovery' })` + `lib/email.ts` send, and a second SPA page that POSTs the
+  token back. Also deferred: profile editing, social login, address book.
 - **Cart & checkout** — no UI/tables yet; catalog DTOs already carry everything a
   cart line would snapshot (price, currency, sku, name, primary image).
-- **Customer accounts** — auth is cookie-first and role-aware (`profiles.role`);
-  adding customer signup is a new route + role, not a rewrite.
 - **Tiered / installer (B2B) pricing** — resolved server-side through
   `resolvePrice(product, user)`; Phase 1 returns the public price.
 - **Payments** — no provider/keys; reintroduce a `PaymentProvider` seam with
@@ -395,6 +497,6 @@ Documented extension points so these are additive later, not refactors:
 - **AI product assistant** — out of scope; a future isolated module with
   read-only tool-use over the catalog service.
 
-Explicitly out of scope now: guest checkout, review submission, email flows
-beyond admin auth. (Rating/review columns exist as static display fields.)
+Explicitly out of scope now: review submission, and email flows beyond the
+signup confirmation. (Rating/review columns exist as static display fields.)
 ```

@@ -150,6 +150,28 @@ export interface LoginRequest {
   password: string;
 }
 
+/** Public self-signup. Always creates a `customer`; the role is never client-supplied. */
+export interface SignupRequest {
+  email: string;
+  password: string;
+  fullName?: string;
+}
+
+/**
+ * 202 body from POST /auth/signup. Deliberately not a ProfileDTO: signup does
+ * NOT sign you in — the account is unconfirmed until the emailed link is opened.
+ */
+export interface SignupResponse {
+  status: 'confirmation_sent';
+  email: string;
+}
+
+/** Body for POST /auth/confirm — the token comes from the emailed link. */
+export interface ConfirmEmailRequest {
+  token: string;
+  type?: 'signup' | 'magiclink';
+}
+
 // ---------------------------------------------------------------------------
 // Admin DTOs (superset — includes fields stripped from public output)
 // ---------------------------------------------------------------------------
@@ -198,6 +220,21 @@ export interface AdminProductListItem extends ProductSummaryDTO {
   updatedAt: string;
   /** Drives the "No ES" badge in the admin list. */
   nameEs: string | null;
+}
+
+/**
+ * One row of the admin Users list. Sourced from `profiles` alone — Supabase
+ * keeps `email_confirmed_at` on `auth.users`, and merging a separately
+ * paginated admin listUsers() into this one isn't worth it, so confirmation
+ * state is a deliberate omission here.
+ */
+export interface AdminUserListItem {
+  id: string;
+  email: string;
+  fullName: string | null;
+  role: Role;
+  isActive: boolean;
+  createdAt: string;
 }
 
 /** Result of the orphan-image sweep. */
@@ -329,7 +366,7 @@ export interface AgentSearchResult {
 }
 
 // ---------------------------------------------------------------------------
-// Orders (guest cart checkout — Phase 1: no payments, no customer accounts)
+// Orders (cart checkout — no payments. Guest OR signed-in: see orders.user_id)
 // ---------------------------------------------------------------------------
 
 export type OrderStatus = 'new' | 'confirmed' | 'fulfilled' | 'cancelled';
@@ -383,6 +420,8 @@ export interface CreateOrderRequest {
 /** Lightweight row for the admin orders list (no line items — itemCount instead). */
 export interface AdminOrderListItem {
   id: string;
+  /** The account that placed it, or null for a guest order. Admin DTO only. */
+  userId: string | null;
   orderNumber: string;
   customerName: string;
   customerPhone: string;

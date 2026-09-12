@@ -35,8 +35,14 @@ function primaryImageUrl(images: ProductImageForOrder[] | null): string | null {
  * sole pricing authority here: `input.items` carries only { productId, quantity
  * }, never a price, so there is nothing for a tampered request to smuggle —
  * every price is re-read from `products` and run through resolvePrice().
+ *
+ * `userId` comes from the session cookie via optionalAuth, never from the body:
+ * a client must not be able to file an order under someone else's account.
  */
-export async function createOrder(input: CreateOrderInput): Promise<OrderDTO> {
+export async function createOrder(
+  input: CreateOrderInput,
+  userId: string | null = null,
+): Promise<OrderDTO> {
   // Dedupe by productId (a client could send the same product twice), summing
   // quantities so "add 2, then add 3 more" checks out as one line of 5.
   const quantities = new Map<string, number>();
@@ -88,6 +94,9 @@ export async function createOrder(input: CreateOrderInput): Promise<OrderDTO> {
   const { data: orderRow, error: orderErr } = await db
     .from('orders')
     .insert({
+      // NULL for a guest checkout — the flow is unchanged for shoppers who
+      // never sign in (see optionalAuth on the route).
+      user_id: userId,
       customer_name: input.customerName,
       customer_phone: input.customerPhone,
       customer_email: input.customerEmail ?? null,
@@ -201,4 +210,40 @@ export async function updateOrderStatus(
   if (itemsErr) fail('Failed to load order items', itemsErr.message);
 
   return toOrderDTO(order as OrderRow, items as OrderItemRow[]);
+}
+
+/**
+ * A signed-in shopper's own order history, newest first, with line items.
+ *
+ * Scoped by `user_id` server-side from the session — the id is never a
+ * parameter the caller can choose. Lives here rather than in modules/account so
+ * that every `orders` query stays in one file with the mappers it uses.
+ */
+export async function listUserOrders(userId: string): Promise<OrderDTO[]> {
+  const { data, error } = await db
+    .from('orders')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(100);
+  if (error) fail('Failed to load your orders', error.message);
+
+  const orders = (data ?? []) as OrderRow[];
+  if (orders.length === 0) return [];
+
+  const { data: items, error: itemsErr } = await db
+    .from('order_items')
+    .select('*')
+    .in('order_id', orders.map((o) => o.id))
+    .order('created_at', { ascending: true });
+  if (itemsErr) fail('Failed to load order items', itemsErr.message);
+
+  const byOrder = new Map<string, OrderItemRow[]>();
+  for (const row of (items ?? []) as OrderItemRow[]) {
+    const list = byOrder.get(row.order_id);
+    if (list) list.push(row);
+    else byOrder.set(row.order_id, [row]);
+  }
+
+  return orders.map((o) => toOrderDTO(o, byOrder.get(o.id) ?? []));
 }

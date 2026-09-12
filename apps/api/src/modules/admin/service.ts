@@ -6,6 +6,7 @@ import type {
   AdminStoreLocationDTO,
   AdminProductDTO,
   AdminProductListItem,
+  AdminUserListItem,
   OrphanCleanupResult,
   Paginated,
   ProductImageDTO,
@@ -17,8 +18,10 @@ import type {
   CategoryRow,
   HomeHeroRow,
   HomeTileRow,
+  ProfileRow,
   StoreLocationRow,
 } from '../../types/db.js';
+import { isEmailTaken } from '../auth/service.js';
 import {
   listAllObjectPaths,
   pathFromPublicUrl,
@@ -46,9 +49,11 @@ import {
   toAdminProductDTO,
   toAdminProductListItem,
   toAdminStoreLocationDTO,
+  toAdminUserListItem,
 } from './mappers.js';
 import type {
   AdminProductListQuery,
+  AdminUserListQuery,
   BrandCreate,
   BrandUpdate,
   CategoryCreate,
@@ -62,6 +67,7 @@ import type {
   ReorderInput,
   TileCreate,
   TileUpdate,
+  UserCreate,
 } from './schema.js';
 
 const LIST_SELECT = `
@@ -999,5 +1005,100 @@ export async function cleanupOrphans(dryRun = false): Promise<OrphanCleanupResul
 // admin router can import everything from this one service module like every
 // other section above, without a second copy of the order-fetching logic.
 // ===========================================================================
+
+// ===========================================================================
+// Users
+// ===========================================================================
+
+/**
+ * Reads `profiles` only — never auth.users. Everything the list shows (email,
+ * name, role, active, created) lives on the profile row, and merging in a
+ * separately paginated db.auth.admin.listUsers() to surface confirmation state
+ * would mean reconciling two pagers. Deliberate omission.
+ */
+export async function listAdminUsers(
+  params: AdminUserListQuery,
+): Promise<Paginated<AdminUserListItem>> {
+  let query = db
+    .from('profiles')
+    .select('*', { count: 'exact' })
+    .order('created_at', { ascending: false });
+
+  if (params.role) query = query.eq('role', params.role);
+  if (params.q) {
+    const term = `%${params.q}%`;
+    query = query.or(`email.ilike.${term},full_name.ilike.${term}`);
+  }
+
+  const from = (params.page - 1) * params.pageSize;
+  query = query.range(from, from + params.pageSize - 1);
+
+  const { data, error, count } = await query;
+  if (error) fail('Failed to list users', error);
+
+  const rows = (data ?? []) as ProfileRow[];
+  return {
+    items: rows.map(toAdminUserListItem),
+    total: count ?? rows.length,
+    page: params.page,
+    pageSize: params.pageSize,
+  };
+}
+
+/**
+ * Create an account from the back office. `email_confirm: true` — no email is
+ * sent and no link is needed: the admin types the password and hands it over
+ * out of band. That is the whole difference from the public signup flow, which
+ * emails a link and leaves the account unconfirmed until it is opened.
+ *
+ * The on_auth_user_created trigger writes the `profiles` row (with `full_name`
+ * from user_metadata, role 'customer'), so the only thing left to do here is
+ * promote it when an admin was requested.
+ */
+export async function createUser(input: UserCreate): Promise<AdminUserListItem> {
+  const { data, error } = await db.auth.admin.createUser({
+    email: input.email,
+    password: input.password,
+    email_confirm: true,
+    user_metadata: input.fullName ? { full_name: input.fullName } : {},
+  });
+
+  if (error) {
+    if (isEmailTaken(error)) throw AppError.Conflict('An account with this email already exists.');
+    fail('Failed to create user', error);
+  }
+
+  const id = (data as { user?: { id?: string } } | null)?.user?.id;
+  if (!id) fail('Failed to create user', { message: 'no user returned' });
+
+  const profiles = db.from('profiles');
+  const { data: row, error: profileErr } =
+    input.role === 'admin'
+      ? await profiles.update({ role: 'admin' }).eq('id', id).select('*').maybeSingle()
+      : await profiles.select('*').eq('id', id).maybeSingle();
+
+  if (profileErr) fail('Failed to load the new user profile', profileErr);
+  if (!row) fail('Failed to load the new user profile', { message: 'profile row missing' });
+
+  return toAdminUserListItem(row as ProfileRow);
+}
+
+/**
+ * Activate/deactivate. Both requireAuth and requireRole re-read the profile on
+ * every request (middleware/auth.ts), so deactivating takes effect on the
+ * target's very next call — their existing cookies stop working without any
+ * token revocation.
+ */
+export async function setUserActive(id: string, isActive: boolean): Promise<AdminUserListItem> {
+  const { data, error } = await db
+    .from('profiles')
+    .update({ is_active: isActive })
+    .eq('id', id)
+    .select('*')
+    .maybeSingle();
+  if (error) fail('Failed to update user', error);
+  if (!data) throw AppError.NotFound('User not found');
+  return toAdminUserListItem(data as ProfileRow);
+}
 
 export { listAdminOrders, getAdminOrder, updateOrderStatus } from '../orders/service.js';

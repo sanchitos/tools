@@ -4,6 +4,7 @@ import type {
   AdminOrderListItem,
   AdminProductDTO,
   AdminProductListItem,
+  AdminUserListItem,
   ApiErrorBody,
   BrandDTO,
   CategoryDTO,
@@ -17,6 +18,8 @@ import type {
   ProductListQuery,
   ProductSummaryDTO,
   ProfileDTO,
+  SignupResponse,
+  Role,
   Locale,
   AdminHomeContentDTO,
   AdminHomeTileDTO,
@@ -207,10 +210,26 @@ export const api = {
     request<OrderDTO>('/orders', { method: 'POST', body }),
 
   // --- Auth ---
+  // `_noRefresh` on every unauthenticated route below: a 401 from these means
+  // "those credentials/that token are wrong", never "the access token aged
+  // out", so the refresh-and-replay dance would only add a pointless round trip.
   login: (email: string, password: string) =>
     request<ProfileDTO>('/auth/login', { method: 'POST', body: { email, password }, _noRefresh: true }),
   logout: () => request<void>('/auth/logout', { method: 'POST' }),
   me: () => request<ProfileDTO>('/auth/me'),
+
+  /** 202 — creates an unconfirmed account and emails a link. Does NOT sign you in. */
+  signup: (body: { email: string; password: string; fullName?: string }) =>
+    request<SignupResponse>('/auth/signup', { method: 'POST', body, _noRefresh: true }),
+  /** Exchanges the emailed token for session cookies; returns the profile. */
+  confirmSignup: (token: string, type: 'signup' | 'magiclink' = 'signup') =>
+    request<ProfileDTO>('/auth/confirm', { method: 'POST', body: { token, type }, _noRefresh: true }),
+  /** Always resolves (the server answers 204 regardless) — never leaks whether the address exists. */
+  resendConfirmation: (email: string) =>
+    request<void>('/auth/resend-confirmation', { method: 'POST', body: { email }, _noRefresh: true }),
+
+  // --- Account (the signed-in shopper's own data) ---
+  myOrders: () => request<OrderDTO[]>('/account/orders'),
 
   // --- Admin: products ---
   adminProducts: (query: { q?: string; category?: string; published?: boolean; page?: number; pageSize?: number } = {}) =>
@@ -280,6 +299,14 @@ export const api = {
       method: 'POST',
       query: dryRun ? { dryRun: 'true' } : undefined,
     }),
+
+  // --- Admin: users ---
+  adminUsers: (query: { q?: string; role?: Role; page?: number; pageSize?: number } = {}) =>
+    request<Paginated<AdminUserListItem>>('/admin/users', { query }),
+  createUser: (body: { email: string; password: string; fullName?: string; role: Role }) =>
+    request<AdminUserListItem>('/admin/users', { method: 'POST', body }),
+  setUserActive: (id: string, isActive: boolean) =>
+    request<AdminUserListItem>(`/admin/users/${id}`, { method: 'PATCH', body: { isActive } }),
 
   // --- Admin: orders ---
   adminOrders: (query: { status?: OrderStatus; q?: string; page?: number; pageSize?: number } = {}) =>

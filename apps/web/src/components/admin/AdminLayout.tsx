@@ -10,13 +10,21 @@ const link = ({ isActive }: { isActive: boolean }) =>
       : 'font-medium text-white/85 hover:bg-white/15 hover:text-white'
   }`;
 
-/** Protected admin shell: requires an admin session, renders sidebar + outlet. */
+/**
+ * Protected admin shell: requires an ADMIN session, renders sidebar + outlet.
+ *
+ * The role check is not redundant with the API's requireRole. Until customers
+ * could log in, any session here was an admin session; now a signed-in shopper
+ * hitting /admin would otherwise see the whole back-office chrome with every
+ * panel failing on a 403. Send them to their own account page instead.
+ */
 export function AdminLayout() {
   const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
 
   if (loading) return <div className="flex min-h-screen items-center justify-center"><Loader /></div>;
   if (!user) return <Navigate to="/admin/login" replace />;
+  if (user.role !== 'admin') return <Navigate to="/account" replace />;
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -32,6 +40,7 @@ export function AdminLayout() {
           <NavLink to="/admin/brands" className={link}>Brands</NavLink>
           <NavLink to="/admin/homepage" className={link}>Homepage</NavLink>
           <NavLink to="/admin/locations" className={link}>Locations</NavLink>
+          <NavLink to="/admin/users" className={link}>Users</NavLink>
         </nav>
         <div className="space-y-1 border-t border-white/15 px-3 py-3">
           <a href="/" className="block rounded px-3 py-2 text-body-md text-white/85 hover:bg-white/15 hover:text-white">

@@ -34,10 +34,15 @@ export function toOrderDTO(row: OrderRow, items: OrderItemRow[]): OrderDTO {
   };
 }
 
-/** Lightweight row for the admin list — itemCount instead of full line items. */
+/**
+ * Lightweight row for the admin list — itemCount instead of full line items.
+ * `userId` is exposed here and NOT on OrderDTO: the public checkout response
+ * and a shopper's own history have no use for it.
+ */
 export function toAdminOrderListItem(row: OrderRow, itemCount: number): AdminOrderListItem {
   return {
     id: row.id,
+    userId: row.user_id,
     orderNumber: row.order_number,
     customerName: row.customer_name,
     customerPhone: row.customer_phone,
