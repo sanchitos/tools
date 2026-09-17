@@ -16,11 +16,13 @@ import { AppError } from './errors.js';
 export const PRODUCT_IMAGES_BUCKET = 'product-images';
 export const BRAND_LOGOS_BUCKET = 'brand-logos';
 export const SITE_IMAGES_BUCKET = 'site-images';
+export const CATEGORY_IMAGES_BUCKET = 'category-images';
 
 export type Bucket =
   | typeof PRODUCT_IMAGES_BUCKET
   | typeof BRAND_LOGOS_BUCKET
-  | typeof SITE_IMAGES_BUCKET;
+  | typeof SITE_IMAGES_BUCKET
+  | typeof CATEGORY_IMAGES_BUCKET;
 
 export interface UploadedFile {
   buffer: Buffer;

@@ -97,6 +97,18 @@ export interface ProductHighlightRow {
   sort_order: number;
 }
 
+/**
+ * product <-> subcategory tags (0012). No surrogate id: the PK is the pair.
+ * `category_id` always points at a category with a non-null `parent_id`, and
+ * that parent is the product's own `category_id` — enforced by the API
+ * (validateTaxonomy), not the DB.
+ */
+export interface ProductSubcategoryRow {
+  product_id: string;
+  category_id: string;
+  created_at: string;
+}
+
 export interface OrderRow {
   id: string;
   /** The account that placed it (0011); NULL for a guest order. */

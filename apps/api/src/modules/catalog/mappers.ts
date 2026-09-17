@@ -14,6 +14,7 @@ import type {
   ProductImageRow,
   ProductRow,
   ProductSpecRow,
+  ProductSubcategoryRow,
 } from '../../types/db.js';
 import { resolvePrice } from '../../lib/pricing.js';
 import { DEFAULT_LOCALE, pick, pickNullable, type Locale } from '../../lib/locale.js';
@@ -32,6 +33,12 @@ export interface ProductWithRelations extends ProductRow {
   brand: BrandRow | null;
   category: Pick<CategoryRow, 'id' | 'slug' | 'label' | 'label_es'> | null;
   images: ProductImageRow[] | null;
+  /**
+   * The `product_subcategories` junction rows, embedded by table name (0012).
+   * Only the admin selects ask for it; the public DTOs expose no subcategories,
+   * so this is `undefined` on a catalog read.
+   */
+  subcategories?: Pick<ProductSubcategoryRow, 'category_id'>[] | null;
 }
 
 export interface ProductDetailRelations extends ProductWithRelations {

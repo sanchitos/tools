@@ -188,7 +188,13 @@ export interface AdminProductHighlightDTO extends ProductHighlightDTO {
 export interface AdminProductDTO extends ProductDetailDTO {
   isPublished: boolean;
   brandId: string | null;
+  /** The MAIN category — always a top-level one (enforced server-side). */
   categoryId: string | null;
+  /**
+   * Subcategory tags, always children of `categoryId`. Changing the main
+   * category drops any that no longer belong to it.
+   */
+  subcategoryIds: string[];
   createdAt: string;
   updatedAt: string;
   /** Spanish siblings — null means "not translated yet" (falls back to English). */

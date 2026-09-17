@@ -63,10 +63,17 @@ Supabase SQL Editor, in order. Never run SQL against Supabase directly from code
 - **Never run SQL against Supabase.** Add the next numbered `.sql` in
   `apps/api/supabase/migrations/` and let the user run it manually in the SQL
   Editor. Make column adds idempotent (`add column if not exists`) when amending
-  a file the user may have already run. Latest migration: `0011_user_accounts`.
+  a file the user may have already run. Latest migration: `0013_category_images`.
 - **Add a DTO field:** edit `packages/shared/src/index.ts`, then the relevant
   `mappers.ts` and the row type in `apps/api/src/types/db.ts`. Shared is consumed
   from source, so no rebuild is needed.
+- **PostgREST embeds need an FK hint once two tables have two paths between
+  them.** `product_subcategories` (0012) gives products a second route to
+  `categories`, so both product selects embed `category:categories!category_id`.
+  Drop the hint and *every* product read 400s with `PGRST201`. Adding another
+  junction table means auditing the embeds of both tables it joins. Those select
+  strings are sent verbatim as PostgREST's `select` param — never put a comment
+  inside one.
 - **Add translatable content:** add a nullable `<col>_es` sibling column (never a
   default — NULL means "not translated yet"), resolve it in the mapper with
   `pick()`/`pickNullable()` from `apps/api/src/lib/locale.ts`, and expose the raw
@@ -90,6 +97,11 @@ Supabase SQL Editor, in order. Never run SQL against Supabase directly from code
   plain "Loading…" text.
 - **Images:** render product/remote images through `ImageWithFallback` so broken
   URLs degrade to a placeholder.
+- **Image uploads:** use `components/admin/ImageUploadField`, and gate it on the
+  row already existing ("Save the … first, then add an image") — every upload
+  endpoint is keyed by row id. If a form drops its URL text input in favour of
+  the uploader, also drop that key from the submit body: leaving it in posts
+  `null` on every save and wipes the image that was just uploaded.
 - **Responsive grids:** always set a base `grid-cols-1` (so the mobile track is
   `minmax(0,1fr)`) to avoid content-driven horizontal overflow.
 

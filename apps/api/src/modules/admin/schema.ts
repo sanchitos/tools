@@ -45,7 +45,10 @@ export const productCreateSchema = z.object({
   name: z.string().trim().min(1).max(300),
   nameEs: esText,
   slug: z.string().trim().min(1).max(200).optional(),
+  /** The MAIN category. Must be top-level — see validateTaxonomy in service.ts. */
   categoryId: uuid,
+  /** Subcategory tags; each must be a child of `categoryId`. */
+  subcategoryIds: z.array(uuid).max(20).optional(),
   brandId: uuid.nullable().optional(),
   shortDescription: nullableStr.optional(),
   shortDescriptionEs: esText,
@@ -66,6 +69,7 @@ export const productUpdateSchema = z
     nameEs: esText,
     slug: z.string().trim().min(1).max(200),
     categoryId: uuid,
+    subcategoryIds: z.array(uuid).max(20),
     brandId: uuid.nullable(),
     shortDescription: nullableStr,
     shortDescriptionEs: esText,

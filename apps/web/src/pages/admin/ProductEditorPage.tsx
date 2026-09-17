@@ -21,6 +21,7 @@ interface FormState {
   nameEs: string;
   slug: string;
   categoryId: string;
+  subcategoryIds: string[];
   brandId: string;
   shortDescription: string;
   shortDescriptionEs: string;
@@ -36,7 +37,7 @@ interface FormState {
 }
 
 const EMPTY: FormState = {
-  name: '', nameEs: '', slug: '', categoryId: '', brandId: '',
+  name: '', nameEs: '', slug: '', categoryId: '', subcategoryIds: [], brandId: '',
   shortDescription: '', shortDescriptionEs: '', description: '', descriptionEs: '',
   price: '', stock: '0', sku: '', featured: false, isPublished: true, specs: [], highlights: [],
 };
@@ -60,7 +61,7 @@ export default function ProductEditorPage() {
     if (!p) return;
     setForm({
       name: p.name, nameEs: p.nameEs ?? '', slug: p.slug,
-      categoryId: p.categoryId ?? '', brandId: p.brandId ?? '',
+      categoryId: p.categoryId ?? '', subcategoryIds: p.subcategoryIds, brandId: p.brandId ?? '',
       shortDescription: p.shortDescription ?? '', shortDescriptionEs: p.shortDescriptionEs ?? '',
       description: p.description ?? '', descriptionEs: p.descriptionEs ?? '',
       price: String(p.price), stock: String(p.stock), sku: p.sku ?? '',
@@ -89,6 +90,7 @@ export default function ProductEditorPage() {
       nameEs: esOrNull(form.nameEs),
       slug: form.slug || undefined,
       categoryId: form.categoryId,
+      subcategoryIds: form.subcategoryIds,
       brandId: form.brandId || null,
       shortDescription: form.shortDescription || null,
       shortDescriptionEs: esOrNull(form.shortDescriptionEs),
@@ -132,12 +134,13 @@ export default function ProductEditorPage() {
 
   if (!isNew && product.loading) return <Loader />;
 
-  // adminCategories() already returns parents immediately followed by their
-  // subcategories (see listAdminCategories), so this just needs to indent.
-  const categoryOptions = (cats.data ?? []).map((c) => ({
-    value: c.id,
-    label: c.parentId ? `— ${c.label}` : c.label,
-  }));
+  // Top-level only: since 0012 `categoryId` is the MAIN category and the server
+  // rejects a subcategory here. Subcategories are picked separately, below.
+  const allCategories = cats.data ?? [];
+  const categoryOptions = allCategories
+    .filter((c) => c.parentId === null)
+    .map((c) => ({ value: c.id, label: c.label }));
+  const subcategories = allCategories.filter((c) => c.parentId === form.categoryId);
   const brandOptions = [{ value: '', label: '— No brand —' }, ...(brands.data ?? []).map((b) => ({ value: b.id, label: b.name }))];
 
   return (
@@ -172,12 +175,48 @@ export default function ProductEditorPage() {
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Category" required>
-              <Select value={form.categoryId} options={categoryOptions} placeholder="Choose a category" onChange={(v) => set('categoryId', v)} />
+              <Select
+                value={form.categoryId}
+                options={categoryOptions}
+                placeholder="Choose a category"
+                // Clear the tags here, in the change handler — NOT in an effect
+                // keyed on categoryId, which would fire right after hydration
+                // sets it and wipe the saved tags of every product you open.
+                onChange={(v) => setForm((f) => ({ ...f, categoryId: v, subcategoryIds: [] }))}
+              />
             </Field>
             <Field label="Brand">
               <Select value={form.brandId} options={brandOptions} onChange={(v) => set('brandId', v)} />
             </Field>
           </div>
+          <Field label="Subcategories">
+            {!form.categoryId ? (
+              <p className="text-body-md text-ink-muted">Choose a category first.</p>
+            ) : subcategories.length === 0 ? (
+              <p className="text-body-md text-ink-muted">This category has no subcategories yet.</p>
+            ) : (
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                {subcategories.map((sc) => (
+                  <label key={sc.id} className="flex items-center gap-2 text-body-md text-ink">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={form.subcategoryIds.includes(sc.id)}
+                      onChange={(e) =>
+                        set(
+                          'subcategoryIds',
+                          e.target.checked
+                            ? [...form.subcategoryIds, sc.id]
+                            : form.subcategoryIds.filter((id) => id !== sc.id),
+                        )
+                      }
+                    />
+                    {sc.label}
+                  </label>
+                ))}
+              </div>
+            )}
+          </Field>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Price (J$)" required>
               <input className={input} type="number" min="0" step="0.01" required value={form.price} onChange={(e) => set('price', e.target.value)} />

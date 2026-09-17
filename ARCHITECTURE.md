@@ -50,7 +50,7 @@ tools-jamaica/
 │   │   │   │   └── admin/           # role-gated CRUD + image upload + users
 │   │   │   └── types/               # db row types, express augmentation
 │   │   ├── supabase/
-│   │   │   ├── migrations/          # 0001_init … 0011_user_accounts (run by hand)
+│   │   │   ├── migrations/          # 0001_init … 0013_category_images (run by hand)
 │   │   │   └── seed.sql
 │   │   └── test/                    # vitest + supertest (hermetic, mocked)
 │   └── web/                         # React + Vite SPA
@@ -218,6 +218,19 @@ Supabase SQL Editor, in order.
 - **`products`** — `slug` (unique), `name`, `brand_id` (FK, nullable),
   `category_id` (FK), descriptions, `price`, `currency`, `stock`, `sku` (unique),
   `featured`, `is_published`, `rating`/`review_count` (static display columns).
+  Since `0012`, `category_id` is the **main** category and is always **top-level**
+  — a product's subcategories are many-to-many tags, below.
+- **`product_subcategories`** — the product↔subcategory join (`0012`).
+  `primary key (product_id, category_id)`, `product_id` cascade, `category_id`
+  **restrict**. Restrict is load-bearing: it is what makes deleting a
+  subcategory that still has tagged products a 409 instead of silently untagging
+  every one of them. Two invariants the DB *cannot* express (no subqueries in a
+  `CHECK`) are enforced by `validateTaxonomy()` in the admin service, exactly as
+  `0007` left hierarchy depth to `validateParentId()`: the main category is
+  top-level, and every tag is a child **of that** category. That second rule is
+  what keeps a department filter honest — a tagged product's main category is
+  always the tag's parent, so `category_id` alone still answers "everything in
+  this department".
 - **`product_images`** — `product_id` (FK cascade), `url`, `is_primary`,
   `alt_text`, `sort_order`. A partial unique index enforces **one primary per
   product**.
@@ -225,6 +238,13 @@ Supabase SQL Editor, in order.
 - **`home_hero`** — the editable hero. A **singleton row** (`id boolean primary
   key check (id)`), not a key/value settings table: the hero has a fixed designed
   shape, so typed columns keep `not null` meaningful and give a compile-time DTO.
+  It is written with an **`update … where id`, never an upsert**, and that is not
+  a style preference: PostgREST compiles `.upsert()` to `insert … on conflict do
+  update`, and Postgres checks NOT NULL on the *proposed* tuple **before** it
+  resolves the conflict — so any partial write omitting `headline` (NOT NULL, no
+  default) raises `23502` even when the row already exists. That is exactly what
+  made hero image replacement fail with a 500. Both `updateHero` and
+  `setHeroImage` branch on existence instead.
 - **`home_tiles`** — `slot` (`promo` | `service` | `ticker`), title/body, `icon`,
   `image_url`, `href`, `sort_order`, `is_published`. One table for three
   homepage blocks that differ only in where they render. The two promo cards no
@@ -263,24 +283,46 @@ tables.
 
 ### Storage
 
-Public-read buckets `product-images`, `brand-logos` and `site-images` (hero,
-tiles, location photos). Admin uploads go **through Express → Supabase Storage**
-(service role); the API returns the public URL and persists it. Every helper in
-`lib/storage.ts` takes the bucket **first, with no default** — a wrong bucket
-would silently leave orphans, and these functions back a destructive sweep.
+Public-read buckets `product-images`, `brand-logos`, `site-images` (hero, tiles,
+location photos) and `category-images` (`0013` — categories *and* subcategories,
+which are rows in the same table, so one bucket and one endpoint cover both).
+Admin uploads go **through Express → Supabase Storage** (service role); the API
+returns the public URL and persists it. Every helper in `lib/storage.ts` takes
+the bucket **first, with no default** — a wrong bucket would silently leave
+orphans, and these functions back a destructive sweep.
 
 Deleting a product/image/brand/tile/location removes its Storage object, and an
 admin **orphan-sweep** endpoint removes unreferenced objects (only within our own
 buckets — `pathFromPublicUrl` returns null for anything else, so external seed
 URLs are never touched). The sweep has three safety rails, all load-bearing:
 
-1. A **registry** pairing each swept bucket with every column that references it.
-2. **`site-images` is excluded** from that registry — its URLs span three tables,
-   and one missed source is a deleted hero.
+1. A **registry** (`SWEEPS`) pairing each swept bucket with every column that
+   references it. All four buckets are now registered.
+2. **`site-images` is the dangerous entry**, because it is the only bucket whose
+   URLs span more than one table: `home_hero.image_url`, `home_tiles.image_url`
+   *and* `store_locations.image_url`. Its reference source is therefore a
+   deliberate union (`siteImageRefs()`), and that function's source list **is**
+   the safety property — dropping one entry does not degrade the sweep, it
+   deletes live site content (no `home_hero` entry ⇒ the next sweep removes the
+   hero image). Any new table or column holding a site-images URL must be added
+   there in the same commit. `test/orphans.test.ts` pins each of the three by
+   asserting an image referenced by *only* that source survives a sweep, so
+   removing one fails the suite rather than the site. The union deliberately
+   does not swallow query errors: a failed source aborts the whole sweep, since
+   sweeping with two of three reference sets is the exact accident it exists to
+   prevent. `category-images` is the easy case by contrast, and that is
+   precisely why it is its own bucket rather than a folder under `site-images`:
+   `categories.image_url` is the single column that references it.
 3. A **tripwire**: zero references against a non-empty bucket means the reference
    query broke, not that every object is unused — it logs and skips rather than
    emptying the bucket. The admin button always **dry-runs first** and confirms
    against a real file list.
+
+The UI is one button, **"Clean up unused images"**, in the header of the admin
+**Products** page. It scans (`?dryRun=true`) before it ever deletes and names the
+actual paths in the confirmation, because the admin has never seen these files
+and authorising a bare count is not consent. `?dryRun=true` is also the
+read-only way to simply *inventory* orphans without removing anything.
 
 ---
 
@@ -294,7 +336,7 @@ pageSize }`.
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/products` | Filter/sort/paginate: `category[]`, `brand[]`, `minPrice`, `maxPrice`, `inStock`, `q`, `sort`, `page`, `pageSize`. Published only. |
+| GET | `/products` | Filter/sort/paginate: `category[]`, `brand[]`, `minPrice`, `maxPrice`, `inStock`, `q`, `sort`, `page`, `pageSize`. Published only. A `category` slug matches a product's **main category or any of its subcategory tags** (`0012`), on both the plain and the search path. |
 | GET | `/products/featured` | Home featured rail. |
 | GET | `/products/:slug` | Full detail incl. images, specs, highlights, related. Published only. |
 | GET | `/categories` | Published categories with `image_url` + product counts. |
@@ -324,11 +366,12 @@ language in the mappers, so no storefront component had to change.
 
 | Method | Path | Notes |
 |---|---|---|
-| GET/POST/PATCH/DELETE | `/admin/products…` | Full CRUD incl. specs/highlights, `featured`, `is_published`, stock. |
+| GET/POST/PATCH/DELETE | `/admin/products…` | Full CRUD incl. specs/highlights, `subcategoryIds`, `featured`, `is_published`, stock. A non-top-level `categoryId`, or a subcategory outside it, is a 400. |
 | POST/PATCH/DELETE | `/admin/products/:id/images…` | Multipart upload; reorder; set-primary; delete (removes the Storage object). |
-| GET/POST/PATCH/DELETE | `/admin/categories…` | Category CRUD (delete blocked with 409 if products reference it). |
+| GET/POST/PATCH/DELETE | `/admin/categories…` | Category CRUD (delete blocked with 409 if products or subcategories reference it; also deletes the Storage image). |
+| POST | `/admin/categories/:id/image` | Category **or subcategory** image upload (replaces + deletes the old object). |
 | GET/POST/PATCH/DELETE | `/admin/brands…` | Brand CRUD. |
-| GET/PATCH/POST | `/admin/home…` | Hero (singleton upsert) + hero image upload. |
+| GET/PATCH/POST | `/admin/home…` | Hero (singleton update) + hero image upload. The image endpoint 400s until the hero row exists, since creating it needs a `headline` it has no way to supply. |
 | GET/POST/PATCH/DELETE | `/admin/home/tiles…` | Tile CRUD + per-tile image upload. |
 | GET/POST/PATCH/DELETE | `/admin/locations…` | Store-location CRUD + photo upload. |
 | GET/POST/PATCH | `/admin/users…` | Paginated list (`?q=` email/name, `?role=`), create (`customer` **or** `admin`), activate/deactivate. |
@@ -394,6 +437,14 @@ columns with Spanish text. Do not "simplify" this into a global.
   - Admin **chrome** stays English; admin **forms** get side-by-side en/es
     inputs via `components/admin/BilingualField.tsx`, and the product/category
     lists carry a "No ES" badge so untranslated rows are findable.
+- **The product editor's taxonomy controls** are a top-level-only `Select` for
+  the main category plus an inline **checkbox group** for that category's
+  subcategories — not a new `ui/` multi-select. `ui/*` is shared with the
+  storefront and must stay i18n-free, there is one consumer, and the admin wants
+  every subcategory of a department visible at once. Changing the main category
+  clears the tags **in the change handler**, never in an effect keyed on
+  `categoryId` — such an effect fires right after hydration sets it and would
+  wipe the saved tags of every product you open.
 - **Pages.** Public: Home (hero, trust bar, departments, featured rail, CTA),
   Shop (URL-synced filters/search/sort + pagination), Product detail (gallery,
   specs, highlights, related), plus the account flow — **Signup**, **Login**,
@@ -470,8 +521,10 @@ development it should point at the Vite dev server.
   registered **after** the API routes.
 - **Tests:** Vitest + supertest in `apps/api`, hermetic (Supabase, JWKS and
   `lib/email.ts` are mocked at the module boundary), covering app wiring,
-  catalog reads, auth (login, signup, confirmation), the account surface, and
-  admin role-gating.
+  catalog reads, auth (login, signup, confirmation), the account surface,
+  admin role-gating, and the orphan sweep (`lib/storage.ts`'s two Supabase-facing
+  functions are stubbed while `pathFromPublicUrl` stays real, since URL→path
+  resolution is the logic under test).
 - **Deploy:** a multi-stage `Dockerfile` at the repo root builds web + api on
   `node:24-alpine`, prunes dev deps, and runs `node apps/api/dist/index.js` as an
   unprivileged user. `railway.json` uses the Dockerfile builder with a `/health`

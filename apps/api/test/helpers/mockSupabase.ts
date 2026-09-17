@@ -62,7 +62,7 @@ function take(table: string): QueryResult {
   return q && q.length ? q.shift()! : { data: [], error: null, count: 0 };
 }
 
-const CHAIN = ['select', 'eq', 'in', 'gte', 'lte', 'gt', 'neq', 'or', 'ilike', 'order', 'range', 'limit'];
+const CHAIN = ['select', 'eq', 'in', 'gte', 'lte', 'gt', 'neq', 'not', 'or', 'ilike', 'order', 'range', 'limit'];
 
 function builder(table: string) {
   const b: Record<string, unknown> = {};

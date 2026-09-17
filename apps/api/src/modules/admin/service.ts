@@ -30,6 +30,7 @@ import {
   uploadObject,
   uploadProductImage,
   BRAND_LOGOS_BUCKET,
+  CATEGORY_IMAGES_BUCKET,
   PRODUCT_IMAGES_BUCKET,
   SITE_IMAGES_BUCKET,
   type Bucket,
@@ -70,13 +71,27 @@ import type {
   UserCreate,
 } from './schema.js';
 
+/**
+ * Columns + embedded relations for an admin product row.
+ *
+ * `categories!category_id` — the FK hint is REQUIRED, not decorative.
+ * product_subcategories (0012) gives products a SECOND path to categories (a
+ * many-to-many through that junction), so an unhinted `categories` embed fails
+ * with PGRST201 "more than one relationship was found" on EVERY product read.
+ * The hint names the column, which pins the direct FK. Embedding the junction
+ * itself (`product_subcategories`) needs no hint: there is only one FK to it.
+ *
+ * NB: this string is sent verbatim as PostgREST's `select` param — it must stay
+ * a plain field list, so keep commentary out here and in it.
+ */
 const LIST_SELECT = `
   id, slug, name, name_es, brand_id, category_id,
   short_description, short_description_es, description, description_es,
   price, currency, stock, sku, featured, is_published, rating, review_count,
   created_at, updated_at,
   brand:brands ( id, name, slug, logo_url, sort_order, is_featured, created_at, updated_at ),
-  category:categories ( id, slug, label, label_es ),
+  category:categories!category_id ( id, slug, label, label_es ),
+  subcategories:product_subcategories ( category_id ),
   images:product_images ( id, product_id, url, is_primary, alt_text, sort_order, created_at )
 `;
 
@@ -90,6 +105,20 @@ function fail(message: string, error: { message: string; code?: string }): never
 
 function isFkViolation(error: { code?: string } | null): boolean {
   return error?.code === '23503';
+}
+
+/** Sentinel for "match nothing" — an `in`/`eq` with an empty list is invalid. */
+const NIL_UUID = '00000000-0000-0000-0000-000000000000';
+
+/** Ids of products tagged with any of `categoryIds` (0012's junction table). */
+async function productIdsForSubcategories(categoryIds: string[]): Promise<string[]> {
+  if (!categoryIds.length) return [];
+  const { data, error } = await db
+    .from('product_subcategories')
+    .select('product_id')
+    .in('category_id', categoryIds);
+  if (error) fail('Failed to resolve tagged products', error);
+  return Array.from(new Set((data ?? []).map((r) => (r as { product_id: string }).product_id)));
 }
 
 /** Return a slug unique within `table`, suffixing -2, -3… on collision. */
@@ -129,10 +158,20 @@ export async function listAdminProducts(
   if (params.category) {
     const { data: cat } = await db
       .from('categories')
-      .select('id')
+      .select('id, parent_id')
       .eq('slug', params.category)
       .maybeSingle();
-    query = query.eq('category_id', (cat as { id: string } | null)?.id ?? '0');
+    const row = cat as Pick<CategoryRow, 'id' | 'parent_id'> | null;
+    if (!row) {
+      query = query.eq('category_id', NIL_UUID);
+    } else if (row.parent_id === null) {
+      query = query.eq('category_id', row.id);
+    } else {
+      // A subcategory slug: since 0012 no product's category_id points at a
+      // child, so match through the junction instead of returning nothing.
+      const productIds = await productIdsForSubcategories([row.id]);
+      query = query.in('id', productIds.length ? productIds : [NIL_UUID]);
+    }
   }
 
   query = query.order('updated_at', { ascending: false });
@@ -181,7 +220,67 @@ async function replaceHighlights(
   }
 }
 
+/**
+ * Enforce the taxonomy split that 0012 introduced and the DB cannot express:
+ * `products.category_id` is the MAIN category and is always top-level, and
+ * every subcategory tag is a CHILD OF THAT category. Neither rule fits in a
+ * CHECK constraint (no subqueries, no cross-table references), so this is the
+ * only guard — exactly as `validateParentId` is the only guard for hierarchy
+ * depth (0007).
+ */
+async function validateTaxonomy(categoryId: string, subcategoryIds: string[]): Promise<void> {
+  const ids = Array.from(new Set([categoryId, ...subcategoryIds]));
+  const { data, error } = await db.from('categories').select('id, label, parent_id').in('id', ids);
+  if (error) fail('Failed to resolve categories', error);
+
+  const rows = (data ?? []) as Pick<CategoryRow, 'id' | 'label' | 'parent_id'>[];
+  const byId = new Map(rows.map((c) => [c.id, c]));
+
+  const main = byId.get(categoryId);
+  if (!main) throw AppError.BadRequest('Category does not exist');
+  if (main.parent_id !== null) {
+    throw AppError.BadRequest(
+      `"${main.label}" is a subcategory — choose a top-level category as the main one`,
+    );
+  }
+
+  for (const subId of subcategoryIds) {
+    const sub = byId.get(subId);
+    if (!sub) throw AppError.BadRequest('Subcategory does not exist');
+    if (sub.parent_id !== categoryId) {
+      throw AppError.BadRequest(`"${sub.label}" is not a subcategory of "${main.label}"`);
+    }
+  }
+}
+
+/** Ids of every direct child of `parentId`. */
+async function childCategoryIds(parentId: string): Promise<string[]> {
+  const { data, error } = await db.from('categories').select('id').eq('parent_id', parentId);
+  if (error) fail('Failed to resolve subcategories', error);
+  return (data ?? []).map((r) => (r as { id: string }).id);
+}
+
+/**
+ * Rewrite a product's subcategory tags. Same delete-then-insert contract as
+ * replaceSpecs: an omitted key leaves the rows alone, `[]` clears them.
+ */
+async function replaceProductSubcategories(productId: string, ids: string[]): Promise<void> {
+  const del = await db.from('product_subcategories').delete().eq('product_id', productId);
+  if (del.error) fail('Failed to update subcategories', del.error);
+
+  const unique = Array.from(new Set(ids));
+  if (unique.length) {
+    const rows = unique.map((category_id) => ({ product_id: productId, category_id }));
+    const ins = await db.from('product_subcategories').insert(rows);
+    if (ins.error) {
+      if (isFkViolation(ins.error)) throw AppError.BadRequest('Invalid subcategory');
+      fail('Failed to insert subcategories', ins.error);
+    }
+  }
+}
+
 export async function createProduct(input: ProductCreate): Promise<AdminProductDTO> {
+  await validateTaxonomy(input.categoryId, input.subcategoryIds ?? []);
   const slug = await ensureUniqueSlug('products', slugify(input.slug ?? input.name));
 
   const { data, error } = await db
@@ -215,11 +314,34 @@ export async function createProduct(input: ProductCreate): Promise<AdminProductD
   const id = (data as { id: string }).id;
   if (input.specs) await replaceSpecs(id, input.specs);
   if (input.highlights) await replaceHighlights(id, input.highlights);
+  if (input.subcategoryIds?.length) await replaceProductSubcategories(id, input.subcategoryIds);
   return getAdminProduct(id);
 }
 
 export async function updateProduct(id: string, input: ProductUpdate): Promise<AdminProductDTO> {
-  await getAdminProduct(id); // 404 if missing
+  const current = await getAdminProduct(id); // 404 if missing
+
+  // Taxonomy is validated against the EFFECTIVE pair, not just what was sent.
+  // Two distinct cases, and the difference is deliberate:
+  //   - tags supplied explicitly that don't fit the category -> 400, so a bad
+  //     client can't write rows the filters and counts would then misreport;
+  //   - a category MOVE with no new tag list -> silently prune the tags that no
+  //     longer belong, because 400-ing a PATCH of {categoryId} alone would be
+  //     obstructive, and the editor clears the selection on change anyway.
+  // A PATCH touching neither key validates nothing, so {isPublished:true} can
+  // never 400 on taxonomy.
+  const nextCategoryId = input.categoryId ?? current.categoryId;
+  let nextSubcategoryIds: string[] | undefined;
+  if (nextCategoryId && input.subcategoryIds !== undefined) {
+    await validateTaxonomy(nextCategoryId, input.subcategoryIds);
+    nextSubcategoryIds = input.subcategoryIds;
+  } else if (nextCategoryId && input.categoryId !== undefined) {
+    await validateTaxonomy(nextCategoryId, []);
+    if (input.categoryId !== current.categoryId && current.subcategoryIds.length) {
+      const children = new Set(await childCategoryIds(nextCategoryId));
+      nextSubcategoryIds = current.subcategoryIds.filter((sid) => children.has(sid));
+    }
+  }
 
   const patch: Record<string, unknown> = {};
   if (input.name !== undefined) patch.name = input.name;
@@ -250,6 +372,9 @@ export async function updateProduct(id: string, input: ProductUpdate): Promise<A
 
   if (input.specs !== undefined) await replaceSpecs(id, input.specs);
   if (input.highlights !== undefined) await replaceHighlights(id, input.highlights);
+  if (nextSubcategoryIds !== undefined) {
+    await replaceProductSubcategories(id, nextSubcategoryIds);
+  }
   return getAdminProduct(id);
 }
 
@@ -541,11 +666,18 @@ export async function updateCategory(
 }
 
 export async function deleteCategory(id: string): Promise<void> {
-  const { data: existing } = await db.from('categories').select('id').eq('id', id).maybeSingle();
+  const { data: existing } = await db
+    .from('categories')
+    .select('id, image_url')
+    .eq('id', id)
+    .maybeSingle();
   if (!existing) throw AppError.NotFound('Category not found');
 
   const { error } = await db.from('categories').delete().eq('id', id);
   if (error) {
+    // `on delete restrict` from products.category_id AND from categories.parent_id
+    // AND (since 0012) from product_subcategories.category_id all land here, which
+    // is why that FK is restrict: cascade would silently untag every product.
     if (isFkViolation(error)) {
       throw AppError.Conflict(
         'Category still has products or subcategories; reassign or delete them first',
@@ -553,6 +685,43 @@ export async function deleteCategory(id: string): Promise<void> {
     }
     fail('Failed to delete category', error);
   }
+
+  const url = (existing as { image_url: string | null }).image_url;
+  if (url) await removeObjectByUrl(CATEGORY_IMAGES_BUCKET, url);
+}
+
+/**
+ * Replace a category's (or subcategory's) image. Same compensating-delete shape
+ * as setBrandLogo: a failed DB write removes the just-uploaded object, and a
+ * successful one removes the OLD object so replacements don't accumulate.
+ * Subcategories need nothing extra — they are rows in this same table.
+ */
+export async function setCategoryImage(id: string, file: UploadedFile): Promise<AdminCategoryDTO> {
+  const { data: existing, error: exErr } = await db
+    .from('categories')
+    .select('id, image_url')
+    .eq('id', id)
+    .maybeSingle();
+  if (exErr) fail('Failed to load category', exErr);
+  if (!existing) throw AppError.NotFound('Category not found');
+  const previousUrl = (existing as { image_url: string | null }).image_url;
+
+  const uploaded = await uploadObject(CATEGORY_IMAGES_BUCKET, id, file);
+
+  const { data, error } = await db
+    .from('categories')
+    .update({ image_url: uploaded.url })
+    .eq('id', id)
+    .select('*')
+    .maybeSingle();
+  if (error || !data) {
+    await removeObjects(CATEGORY_IMAGES_BUCKET, [uploaded.path]); // roll back the orphan
+    if (error) fail('Failed to save category image', error);
+    throw AppError.NotFound('Category not found');
+  }
+
+  if (previousUrl) await removeObjectByUrl(CATEGORY_IMAGES_BUCKET, previousUrl);
+  return toAdminCategoryDTO(data as never);
 }
 
 // ===========================================================================
@@ -676,9 +845,17 @@ export async function getAdminHomeContent(): Promise<AdminHomeContentDTO> {
 }
 
 /**
- * Upsert the singleton hero. `id boolean primary key check (id)` is what makes
- * this one statement with no "does the row exist yet" branch — but `headline`
- * is NOT NULL, so an insert that creates the row must supply one.
+ * Write the singleton hero.
+ *
+ * Deliberately NOT an upsert, even though `id boolean primary key check (id)`
+ * makes one look natural. PostgREST turns `.upsert()` into
+ * `insert ... on conflict (id) do update`, and Postgres evaluates NOT NULL
+ * constraints on the PROPOSED tuple BEFORE it resolves the conflict — so any
+ * partial write that omits `headline` (NOT NULL, no default) fails with 23502
+ * even when the row already exists. That is not a hypothetical: it is what made
+ * hero image replacement 500 with "Failed to save hero image". Branching on
+ * existence, the way setTileImage/setLocationImage already do, removes the whole
+ * class of bug rather than patching the one symptom.
  */
 export async function updateHero(input: HeroUpdate) {
   const patch: Record<string, unknown> = { id: true };
@@ -698,30 +875,46 @@ export async function updateHero(input: HeroUpdate) {
     throw AppError.BadRequest('A headline is required to create the hero');
   }
 
-  const { data, error } = await db
-    .from('home_hero')
-    .upsert(patch, { onConflict: 'id' })
-    .select('*')
-    .single();
+  const { data, error } = existing
+    ? await db.from('home_hero').update(patch).eq('id', true).select('*').maybeSingle()
+    : await db.from('home_hero').insert(patch).select('*').maybeSingle();
   if (error) fail('Failed to save hero', error);
+  if (!data) throw AppError.NotFound('Hero not found');
   return toAdminHomeHeroDTO(data as never);
 }
 
-/** Replace the hero image, rolling back the upload if the DB write fails. */
+/**
+ * Replace the hero image, rolling back the upload if the DB write fails.
+ *
+ * An UPDATE, never an upsert — see updateHero's comment: an upsert that carries
+ * only `image_url` trips `headline`'s NOT NULL on the proposed insert tuple and
+ * 23502s even against an existing row. There is no insert branch here either,
+ * because creating the hero needs a headline this endpoint doesn't have; the
+ * admin saves the text first (which the UI enforces by hiding the picker).
+ */
 export async function setHeroImage(file: UploadedFile) {
-  const { data: existing } = await db.from('home_hero').select('image_url').maybeSingle();
-  const previousUrl = (existing as { image_url: string | null } | null)?.image_url ?? null;
+  const { data: existing, error: exErr } = await db
+    .from('home_hero')
+    .select('id, image_url')
+    .maybeSingle();
+  if (exErr) fail('Failed to load hero', exErr);
+  if (!existing) {
+    throw AppError.BadRequest('Add a hero headline and save it before uploading an image');
+  }
+  const previousUrl = (existing as { image_url: string | null }).image_url;
 
   const uploaded = await uploadObject(SITE_IMAGES_BUCKET, 'hero', file);
 
   const { data, error } = await db
     .from('home_hero')
-    .upsert({ id: true, image_url: uploaded.url }, { onConflict: 'id' })
+    .update({ image_url: uploaded.url })
+    .eq('id', true)
     .select('*')
-    .single();
-  if (error) {
+    .maybeSingle();
+  if (error || !data) {
     await removeObjects(SITE_IMAGES_BUCKET, [uploaded.path]); // roll back the orphaned upload
-    fail('Failed to save hero image', error);
+    if (error) fail('Failed to save hero image', error);
+    throw AppError.NotFound('Hero not found');
   }
 
   if (previousUrl) await removeObjectByUrl(SITE_IMAGES_BUCKET, previousUrl);
@@ -952,17 +1145,52 @@ interface Sweep {
 }
 
 /**
+ * Every column that can reference an object in `site-images`, unioned.
+ *
+ * This list IS the safety property for that bucket: it holds the hero, the
+ * homepage tiles and the branch photos, so dropping one source here does not
+ * degrade the sweep, it deletes live site content — a missing `home_hero` entry
+ * means the next sweep removes the hero image. Adding any new table or column
+ * that stores a site-images URL means adding it here in the same commit.
+ * `test/orphans.test.ts` pins all three.
+ *
+ * Deliberately NOT wrapped in try/catch: refPathsFrom throws on a query error,
+ * and aborting the whole sweep is the only safe response to an incomplete
+ * reference set. Sweeping with two of three sources is the exact failure this
+ * function exists to prevent.
+ */
+async function siteImageRefs(): Promise<string[]> {
+  const sources: Array<[table: string, column: string]> = [
+    ['home_hero', 'image_url'],
+    ['home_tiles', 'image_url'],
+    ['store_locations', 'image_url'],
+  ];
+  const perSource = await Promise.all(
+    sources.map(([table, column]) => refPathsFrom(SITE_IMAGES_BUCKET, table, column)),
+  );
+  return perSource.flat();
+}
+
+/**
  * Buckets the orphan sweep is allowed to touch, each paired with EVERY column
  * that can reference an object in it. A bucket swept without a complete
  * reference source deletes live site content.
  *
- * `site-images` is deliberately absent: its URLs span home_hero.image_url,
- * home_tiles.image_url AND store_locations.image_url, and one missed source is
- * a deleted hero. Add it only once all three are registered here.
+ * `site-images` spans three tables, which is why it was excluded until its
+ * reference sources were all registered — see siteImageRefs above, which is now
+ * that complete set.
+ *
+ * `category-images` (0013) is the easy case, and that is the whole reason it is
+ * its own bucket rather than a folder in site-images: categories.image_url is
+ * the single column that can reference it, for parents and subcategories alike.
+ * Externally-hosted seed URLs resolve to null through pathFromPublicUrl, so the
+ * sweep can never reach them.
  */
 const SWEEPS: Sweep[] = [
   { bucket: PRODUCT_IMAGES_BUCKET, refs: () => refPathsFrom(PRODUCT_IMAGES_BUCKET, 'product_images', 'url') },
   { bucket: BRAND_LOGOS_BUCKET, refs: () => refPathsFrom(BRAND_LOGOS_BUCKET, 'brands', 'logo_url') },
+  { bucket: CATEGORY_IMAGES_BUCKET, refs: () => refPathsFrom(CATEGORY_IMAGES_BUCKET, 'categories', 'image_url') },
+  { bucket: SITE_IMAGES_BUCKET, refs: siteImageRefs },
 ];
 
 /**

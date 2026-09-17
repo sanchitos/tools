@@ -1,4 +1,5 @@
 import type { ErrorRequestHandler, RequestHandler } from 'express';
+import { MulterError } from 'multer';
 import { ZodError } from 'zod';
 import type { ApiErrorBody } from '@tools-jamaica/shared';
 import { AppError } from '../lib/errors.js';
@@ -27,6 +28,17 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   if (err instanceof SyntaxError && 'body' in err) {
     const body: ApiErrorBody = {
       error: { code: 'BAD_REQUEST', message: 'Malformed JSON body' },
+    };
+    res.status(400).json(body);
+    return;
+  }
+
+  // Multer rejects (a >8MB image, an unexpected field) are the caller's fault,
+  // not ours: without this branch LIMIT_FILE_SIZE surfaces as a 500 "Internal
+  // server error" in production, which reads as a broken uploader.
+  if (err instanceof MulterError) {
+    const body: ApiErrorBody = {
+      error: { code: 'BAD_REQUEST', message: err.message, details: { field: err.field } },
     };
     res.status(400).json(body);
     return;

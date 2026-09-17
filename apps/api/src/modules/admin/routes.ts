@@ -168,6 +168,16 @@ export function adminRouter(): Router {
     }),
   );
 
+  // Serves subcategories too — they are rows in the same table (0007/0013).
+  router.post(
+    '/categories/:id/image',
+    upload.single('file'),
+    ah(async (req, res) => {
+      const { id } = idParamSchema.parse(req.params);
+      res.json(await svc.setCategoryImage(id, requireImage(req)));
+    }),
+  );
+
   // --- Brands --------------------------------------------------------------
   router.get(
     '/brands',

@@ -93,6 +93,7 @@ export function toAdminProductDTO(p: ProductDetailRelations): AdminProductDTO {
     // `_es` columns the editor needs.
     specs: [...(p.specs ?? [])].sort(bySort).map(toAdminSpecDTO),
     highlights: [...(p.highlights ?? [])].sort(bySort).map(toAdminHighlightDTO),
+    subcategoryIds: (p.subcategories ?? []).map((s) => s.category_id),
   };
 }
 

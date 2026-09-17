@@ -124,18 +124,27 @@ function HeroForm({
       <h2 className="mb-4 font-display text-headline-md text-primary">Hero</h2>
 
       <div className="mb-5">
-        <ImageUploadField
-          label="Background image"
-          url={hero?.imageUrl ?? null}
-          hint="Wide landscape image; text is overlaid on the left."
-          onUpload={async (file) => {
-            const form = new FormData();
-            form.append('file', file);
-            const updated = await api.uploadHeroImage(form);
-            onSaved();
-            return updated?.imageUrl ?? null;
-          }}
-        />
+        {hero ? (
+          <ImageUploadField
+            label="Background image"
+            url={hero.imageUrl}
+            hint="Wide landscape image; text is overlaid on the left."
+            onUpload={async (file) => {
+              const form = new FormData();
+              form.append('file', file);
+              const updated = await api.uploadHeroImage(form);
+              onSaved();
+              return updated?.imageUrl ?? null;
+            }}
+          />
+        ) : (
+          // The hero row doesn't exist yet, and creating it needs a headline
+          // this endpoint has no way to supply (headline is NOT NULL), so the
+          // server refuses. Save the text first — same gate as tiles/locations.
+          <p className="text-label-sm text-ink-muted">
+            Save the headline first, then add a background image.
+          </p>
+        )}
       </div>
 
       <form onSubmit={submit} className="space-y-4">

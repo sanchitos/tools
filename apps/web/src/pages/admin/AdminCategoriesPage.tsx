@@ -3,6 +3,7 @@ import type { AdminCategoryDTO } from '@tools-jamaica/shared';
 import { api, ApiError } from '../../lib/api.js';
 import { useAsync } from '../../lib/useAsync.js';
 import { BilingualField, esOrNull } from '../../components/admin/BilingualField.js';
+import { ImageUploadField } from '../../components/admin/ImageUploadField.js';
 import { Badge, Button, ConfirmDialog, Icon, Loader, Select } from '../../components/ui/index.js';
 
 type Editing = 'new' | AdminCategoryDTO | null;
@@ -123,7 +124,6 @@ function CategoryForm({
   const [label, setLabel] = useState(category?.label ?? '');
   const [labelEs, setLabelEs] = useState(category?.labelEs ?? '');
   const [slug, setSlug] = useState(category?.slug ?? '');
-  const [imageUrl, setImageUrl] = useState(category?.imageUrl ?? '');
   const [sortOrder, setSortOrder] = useState(String(category?.sortOrder ?? 0));
   const [isPublished, setIsPublished] = useState(category?.isPublished ?? true);
   const [parentId, setParentId] = useState(category?.parentId ?? '');
@@ -150,7 +150,9 @@ function CategoryForm({
       label,
       labelEs: esOrNull(labelEs),
       slug: slug || undefined,
-      imageUrl: imageUrl || null,
+      // `imageUrl` is deliberately ABSENT: the image is owned by the uploader
+      // below (POST /admin/categories/:id/image). Sending it from here would
+      // post null on every save and wipe the image the admin just uploaded.
       sortOrder: Number(sortOrder),
       isPublished,
       parentId: parentId || null,
@@ -182,8 +184,23 @@ function CategoryForm({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <label className="block"><span className="mb-1 block text-label-sm font-semibold uppercase tracking-wide text-ink-muted">Slug</span>
           <input className={input} value={slug} placeholder="auto from label" onChange={(e) => setSlug(e.target.value)} /></label>
-        <label className="block sm:col-span-2"><span className="mb-1 block text-label-sm font-semibold uppercase tracking-wide text-ink-muted">Image URL</span>
-          <input className={input} value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} /></label>
+        <div className="sm:col-span-2">
+          {category ? (
+            <ImageUploadField
+              label="Image"
+              url={category.imageUrl}
+              hint="Shown on the departments grid. Replaces the current image; the old file is deleted."
+              onUpload={async (file) => {
+                const form = new FormData();
+                form.append('file', file);
+                const updated = await api.uploadCategoryImage(category.id, form);
+                return updated.imageUrl;
+              }}
+            />
+          ) : (
+            <p className="text-label-sm text-ink-muted">Save the category first, then add an image.</p>
+          )}
+        </div>
         <label className="block"><span className="mb-1 block text-label-sm font-semibold uppercase tracking-wide text-ink-muted">Sort order</span>
           <input className={input} type="number" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} /></label>
         <label className="block">

@@ -161,7 +161,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
 }
 
 /** Multipart upload helper for admin image uploads (no Content-Type override). */
-export async function uploadFile<T>(path: string, form: FormData): Promise<T> {
+export async function uploadFile<T>(path: string, form: FormData, isRetry = false): Promise<T> {
   const headers: Record<string, string> = {};
   const csrf = readCsrf();
   if (csrf) headers['x-csrf-token'] = csrf;
@@ -172,6 +172,18 @@ export async function uploadFile<T>(path: string, form: FormData): Promise<T> {
     headers,
     body: form,
   });
+
+  // Same 401 -> refresh -> replay as request(): without it an access token that
+  // aged out mid-edit makes every upload fail with a bare 401 while every other
+  // admin call silently self-heals. A FormData can be re-sent as-is.
+  if (res.status === 401 && !isRetry) {
+    try {
+      await refreshSession();
+      return uploadFile<T>(path, form, true);
+    } catch {
+      // fall through to the error below
+    }
+  }
 
   if (!res.ok) {
     let errBody: ApiErrorBody = { error: { code: 'UNKNOWN', message: res.statusText } };
@@ -258,6 +270,9 @@ export const api = {
   updateCategory: (id: string, body: unknown) =>
     request<AdminCategoryDTO>(`/admin/categories/${id}`, { method: 'PATCH', body }),
   deleteCategory: (id: string) => request<void>(`/admin/categories/${id}`, { method: 'DELETE' }),
+  /** Serves subcategories too — they are rows in the same table. */
+  uploadCategoryImage: (id: string, form: FormData) =>
+    uploadFile<AdminCategoryDTO>(`/admin/categories/${id}/image`, form),
 
   // --- Admin: brands ---
   adminBrands: () => request<AdminBrandDTO[]>('/admin/brands'),
